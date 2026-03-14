@@ -1,0 +1,11 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "db-hero",
+      "description": "Abstract database architecture visualization",
+      "imageUrl": "https://picsum.photos/seed/db1/1200/800",
+      "imageHint": "database server"
+    }
+  ]
+}
