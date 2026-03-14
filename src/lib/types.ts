@@ -3,19 +3,29 @@ export type Column = {
   name: string;
   type: string;
   isPrimary?: boolean;
+  isForeignKey?: boolean;
+  references?: { table: string; column: string };
   isNullable?: boolean;
 };
 
-export type Table = {
+export type TableSchema = {
   id: string;
   name: string;
-  alias?: string;
   columns: Column[];
-  position: { x: number; y: number };
-  pinnedColumns: string[];
 };
 
-export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL';
+export type TableInstance = {
+  id: string;
+  schemaId: string;
+  name: string;
+  alias?: string;
+  position: { x: number; y: number };
+  pinnedColumns: string[];
+  isRoot?: boolean;
+  isReachable?: boolean;
+};
+
+export type JoinType = 'INNER' | 'LEFT';
 
 export type Join = {
   id: string;
@@ -25,13 +35,53 @@ export type Join = {
   targetColumn: string;
   type: JoinType;
   active: boolean;
+  required?: boolean;
 };
 
-export type WorkbenchProfile = {
+export type FilterOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
+
+export type Filter = {
+  id: string;
+  tableId: string;
+  column: string;
+  operator: FilterOperator;
+  value: string;
+};
+
+export type SortOrder = 'ASC' | 'DESC';
+
+export type SortRule = {
+  id: string;
+  tableId: string;
+  column: string;
+  order: SortOrder;
+};
+
+export type DBType = 'PostgreSQL' | 'MySQL' | 'SQLite';
+
+export type Connection = {
   id: string;
   name: string;
-  connectionUrl: string;
-  databaseType: 'PostgreSQL' | 'MySQL' | 'SQLite';
+  type: DBType;
+  host: string;
+  port: number;
+  databaseName: string;
+  username: string;
+  password?: string;
+  status: 'connected' | 'disconnected' | 'error';
+};
+
+export type Profile = {
+  id: string;
+  name: string;
+  connectionId: string;
+  tables: TableInstance[];
+  joins: Join[];
+  rootTableId: string | null;
+  selectedColumns: { tableId: string; column: string }[];
+  filters: Filter[];
+  sorting: SortRule[];
+  limit: number;
 };
 
 export type QueryResult = {
@@ -49,4 +99,12 @@ export type ExecutionHistoryItem = {
     time: number;
     rows: number;
   };
+  status: 'success' | 'error';
+};
+
+export type ParameterPreset = {
+  id: string;
+  name: string;
+  queryId?: string;
+  params: Record<string, any>;
 };

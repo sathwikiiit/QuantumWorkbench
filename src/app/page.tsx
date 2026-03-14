@@ -8,9 +8,17 @@ import { SQLPanel } from '@/components/workbench/SQLPanel';
 import { BottomPanel } from '@/components/workbench/BottomPanel';
 import { LeftSidebar } from '@/components/workbench/LeftSidebar';
 import { Toaster } from '@/components/ui/toaster';
+import { cn } from '@/lib/utils';
+import { Anchor, Info } from 'lucide-react';
 
 export default function WorkbenchPage() {
   const { 
+    connections,
+    activeConnectionId,
+    setActiveConnectionId,
+    profiles,
+    activeProfileId,
+    setActiveProfileId,
     tables, 
     joins,
     updateTablePosition, 
@@ -21,27 +29,45 @@ export default function WorkbenchPage() {
     executeQuery, 
     isExecuting,
     queryResult,
-    history
+    history,
+    addTableToCanvas,
+    removeTableFromCanvas,
+    setAsRoot,
+    rootTableId,
+    reachableTables
   } = useWorkbenchState();
 
   return (
-    <div className="h-screen flex flex-col bg-background selection:bg-primary/30">
-      <Toolbar onExecute={executeQuery} isExecuting={isExecuting} />
+    <div className="h-screen flex flex-col bg-background selection:bg-primary/30 select-none">
+      <Toolbar 
+        connections={connections}
+        activeConnectionId={activeConnectionId}
+        onConnectionChange={setActiveConnectionId}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        onProfileChange={setActiveProfileId}
+        onExecute={executeQuery} 
+        isExecuting={isExecuting} 
+      />
       
       <div className="flex-1 flex overflow-hidden">
-        <LeftSidebar />
+        <LeftSidebar onAddTable={addTableToCanvas} />
 
         <div className="flex-1 relative overflow-hidden flex flex-col">
           {/* Main Workspace Canvas */}
-          <div className="flex-1 relative overflow-hidden canvas-grid bg-[#1a1c22]">
-            <div className="absolute inset-0 p-10">
+          <div className="flex-1 relative overflow-hidden canvas-grid bg-[#12141a]">
+            <div className="absolute inset-0 p-20">
               {tables.map(table => (
                 <TableNode 
                   key={table.id} 
                   table={table} 
+                  isRoot={rootTableId === table.id}
+                  isReachable={reachableTables.has(table.id)}
                   onMove={updateTablePosition}
                   onTogglePin={togglePin}
                   onColumnClick={handleColumnClick}
+                  onRemove={removeTableFromCanvas}
+                  onSetRoot={setAsRoot}
                   isPendingSource={pendingJoin?.tableId === table.id}
                   pendingColumn={pendingJoin?.tableId === table.id ? pendingJoin.column : null}
                 />
@@ -67,61 +93,90 @@ export default function WorkbenchPage() {
                   
                   if (!source || !target) return null;
 
-                  // Heuristic for column vertical position (CardHeader is ~45px, each row is ~33px)
-                  const sourceColIdx = source.columns.findIndex(c => c.name === join.sourceColumn);
-                  const targetColIdx = target.columns.findIndex(c => c.name === join.targetColumn);
+                  const sourceColIdx = source.pinnedColumns.indexOf(join.sourceColumn);
+                  const targetColIdx = target.pinnedColumns.indexOf(join.targetColumn);
                   
-                  const startX = source.position.x + 256; // Card width
-                  const startY = source.position.y + 45 + (sourceColIdx * 33) + 16;
-                  const endX = target.position.x;
-                  const endY = target.position.y + 45 + (targetColIdx * 33) + 16;
+                  // If columns aren't pinned, default to top
+                  const sIdx = sourceColIdx !== -1 ? sourceColIdx : 0;
+                  const tIdx = targetColIdx !== -1 ? targetColIdx : 0;
 
-                  // Quadratic Bezier Curve for smoother lines
+                  const startX = source.position.x + 256; 
+                  const startY = source.position.y + 110 + (sIdx * 27);
+                  const endX = target.position.x;
+                  const endY = target.position.y + 110 + (tIdx * 27);
+
                   const cp1x = startX + (endX - startX) / 2;
                   const pathData = `M ${startX} ${startY} C ${cp1x} ${startY}, ${cp1x} ${endY}, ${endX} ${endY}`;
+
+                  const isReachableJoin = reachableTables.has(join.sourceTableId) && reachableTables.has(join.targetTableId);
 
                   return (
                     <g key={join.id}>
                       <path 
                         d={pathData} 
                         fill="none" 
-                        stroke="hsl(var(--accent))" 
-                        strokeWidth="2" 
-                        strokeDasharray="4 2"
-                        className="opacity-60 transition-all"
+                        stroke={isReachableJoin ? "hsl(var(--accent))" : "hsl(var(--muted-foreground) / 0.3)"} 
+                        strokeWidth={isReachableJoin ? "2" : "1"} 
+                        strokeDasharray={isReachableJoin ? "none" : "4 4"}
+                        className="transition-all duration-500"
                       />
-                      <circle cx={startX} cy={startY} r="3" fill="hsl(var(--accent))" />
-                      <circle cx={endX} cy={endY} r="3" fill="hsl(var(--accent))" />
+                      <circle cx={startX} cy={startY} r="3" fill={isReachableJoin ? "hsl(var(--accent))" : "gray"} />
+                      <circle cx={endX} cy={endY} r="3" fill={isReachableJoin ? "hsl(var(--accent))" : "gray"} />
                     </g>
                   );
                 })}
               </svg>
             </div>
 
+            {/* Canvas Info Overlay */}
+            <div className="absolute bottom-6 left-6 flex flex-col gap-3">
+              <div className="px-4 py-2 bg-black/60 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl flex items-center gap-3">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Active Tables</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-headline font-bold">{tables.length}</span>
+                    <span className="text-[10px] text-primary font-bold">({reachableTables.size} Reachable)</span>
+                  </div>
+                </div>
+                <div className="h-8 w-[1px] bg-white/10" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Joins</span>
+                  <span className="text-xl font-headline font-bold">{joins.length}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Canvas Controls Overlay */}
-            <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
+            <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3">
               {pendingJoin && (
-                <div className="px-4 py-2 bg-accent text-accent-foreground rounded-md shadow-xl text-xs font-bold animate-bounce flex items-center gap-2">
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                  SELECT TARGET COLUMN IN ANOTHER TABLE
+                <div className="px-6 py-3 bg-accent text-accent-foreground rounded-2xl shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] animate-bounce flex items-center gap-3 border-4 border-white/20">
+                  <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse" />
+                  SELECT TARGET COLUMN TO JOIN
                 </div>
               )}
-              <div className="px-3 py-1.5 bg-card/80 backdrop-blur rounded-full border shadow-lg text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                Schema Engine Ready
+              {!rootTableId && tables.length > 0 && (
+                <div className="px-4 py-2 bg-destructive/80 text-white rounded-lg flex items-center gap-2 text-xs font-bold animate-pulse">
+                  <Anchor className="w-4 h-4" />
+                  SET A ROOT TABLE TO START QUERYING
+                </div>
+              )}
+              <div className="px-4 py-2 bg-card/40 backdrop-blur-xl rounded-full border border-white/5 shadow-xl text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                NEURAL ENGINE LINKED
+                <Info className="w-3 h-3 ml-2 opacity-50" />
               </div>
             </div>
           </div>
 
           {/* Bottom Results Area */}
-          <div className="h-1/3 border-t">
+          <div className="h-1/3 border-t bg-background shadow-2xl z-10">
             <BottomPanel result={queryResult} history={history} />
           </div>
         </div>
 
         {/* Right Preview Panel */}
-        <div className="w-80 h-full">
-          <SQLPanel sql={generatedSql} />
+        <div className="w-[320px] h-full flex flex-col border-l">
+           <SQLPanel sql={generatedSql} />
         </div>
       </div>
       <Toaster />
