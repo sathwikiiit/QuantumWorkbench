@@ -158,7 +158,7 @@ export function BottomPanel({
 
                   {filter.operator !== 'IS NULL' && filter.operator !== 'IS NOT NULL' && (
                     <Input 
-                      placeholder="Value..." 
+                      placeholder={filter.operator === 'IN' ? "val1, val2, val3..." : "Value..."}
                       value={filter.value}
                       onChange={(e) => onUpdateFilter(filter.id, { value: e.target.value })}
                       className="flex-1 h-9 bg-background/50 text-xs font-mono"
@@ -237,6 +237,7 @@ export function BottomPanel({
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase">Active</span>
+                    <span className="text-[10px] text-muted-foreground">{join.active ? 'ON' : 'OFF'}</span>
                     <Switch checked={join.active} onCheckedChange={() => onToggleJoin(join.id)} />
                   </div>
                 </div>
