@@ -247,15 +247,9 @@ export function useWorkbenchState() {
     if (activeFilters.length > 0) {
       sql += "\nWHERE " + activeFilters.map(f => {
         const t = tables.find(tbl => tbl.id === f.tableId);
-        let val = '';
+        let val = f.value;
         if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
           val = '';
-        } else if (f.operator === 'IN') {
-          const items = f.value.split(',').map(v => v.trim()).filter(v => v !== '');
-          const formattedItems = items.map(item => isNaN(Number(item)) ? `'${item}'` : item).join(', ');
-          val = `(${formattedItems})`;
-        } else {
-          val = `'${f.value}'`;
         }
         return `${t?.name}.${f.column} ${f.operator} ${val}`.trim();
       }).join("\n  AND ");
