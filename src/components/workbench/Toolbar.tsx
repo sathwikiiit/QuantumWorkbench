@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -21,6 +20,7 @@ import { ProfileDialog } from './ProfileDialog';
 import { Connection, Profile } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 interface ToolbarProps {
   connections: Connection[];
@@ -54,15 +54,17 @@ export function Toolbar({
   return (
     <header className="h-14 border-b bg-background flex items-center justify-between px-4 z-20 shadow-sm">
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
-            <Cpu className="text-white w-5 h-5" />
+        <Link href="/">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
+              <Cpu className="text-white w-5 h-5" />
+            </div>
+            <div className="flex flex-col">
+              <h1 className="font-headline font-black text-sm tracking-tighter leading-none">QUANTUM</h1>
+              <span className="text-[9px] font-bold text-muted-foreground tracking-[0.2em]">WORKBENCH</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <h1 className="font-headline font-black text-sm tracking-tighter leading-none">QUANTUM</h1>
-            <span className="text-[9px] font-bold text-muted-foreground tracking-[0.2em]">WORKBENCH</span>
-          </div>
-        </div>
+        </Link>
 
         <div className="h-6 w-[1px] bg-border mx-2" />
 
@@ -71,9 +73,9 @@ export function Toolbar({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-2 font-bold text-xs h-10 hover:bg-accent/50">
                 <Database className="w-4 h-4 text-accent" />
-                <div className="flex flex-col items-start">
+                <div className="flex flex-col items-start text-left">
                   <span className="leading-tight">{activeConn?.name || 'Select Source'}</span>
-                  <span className="text-[9px] font-normal text-muted-foreground uppercase">{activeConn?.type}</span>
+                  <span className="text-[9px] font-normal text-muted-foreground uppercase">{activeConn?.type || 'No Connection'}</span>
                 </div>
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </Button>
@@ -81,7 +83,7 @@ export function Toolbar({
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground p-3">Available Connections</DropdownMenuLabel>
               {connections.map(conn => (
-                <DropdownMenuItem key={conn.id} onClick={() => onConnectionChange(conn.id)} className="flex items-center justify-between p-3">
+                <DropdownMenuItem key={conn.id} onClick={() => onConnectionChange(conn.id)} className="flex items-center justify-between p-3 cursor-pointer">
                   <div className="flex flex-col">
                     <span className="font-bold">{conn.name}</span>
                     <span className="text-[10px] text-muted-foreground uppercase">{conn.host}</span>
@@ -93,9 +95,11 @@ export function Toolbar({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsConnOpen(true)} className="text-primary font-black uppercase text-[10px] p-3 tracking-widest gap-2">
-                <Plus className="w-3 h-3" /> Manage Connections
-              </DropdownMenuItem>
+              <Link href="/connections">
+                <DropdownMenuItem className="text-primary font-black uppercase text-[10px] p-3 tracking-widest gap-2 cursor-pointer">
+                  <Settings2 className="w-3 h-3" /> Manage Connections
+                </DropdownMenuItem>
+              </Link>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -103,9 +107,9 @@ export function Toolbar({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-2 font-bold text-xs h-10 hover:bg-accent/50">
                 <Globe className="w-4 h-4 text-primary" />
-                <div className="flex flex-col items-start">
+                <div className="flex flex-col items-start text-left">
                   <span className="leading-tight">{activeProfile?.name || 'Select Template'}</span>
-                  <span className="text-[9px] font-normal text-muted-foreground uppercase">Active Graph</span>
+                  <span className="text-[9px] font-normal text-muted-foreground uppercase">Active Workspace</span>
                 </div>
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </Button>
@@ -113,7 +117,7 @@ export function Toolbar({
             <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground p-3">Workspace Templates</DropdownMenuLabel>
               {profiles.map(p => (
-                <DropdownMenuItem key={p.id} onClick={() => onProfileChange(p.id)} className="p-3">
+                <DropdownMenuItem key={p.id} onClick={() => onProfileChange(p.id)} className="p-3 cursor-pointer">
                   <div className="flex flex-col">
                     <span className="font-bold">{p.name}</span>
                     <span className="text-[10px] text-muted-foreground uppercase">{p.tables.length} tables active</span>
@@ -121,9 +125,11 @@ export function Toolbar({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsProfOpen(true)} className="text-primary font-black uppercase text-[10px] p-3 tracking-widest gap-2">
-                <Settings2 className="w-3 h-3" /> Manage Profiles
-              </DropdownMenuItem>
+              <Link href="/templates">
+                <DropdownMenuItem className="text-primary font-black uppercase text-[10px] p-3 tracking-widest gap-2 cursor-pointer">
+                  <Settings2 className="w-3 h-3" /> Manage Templates
+                </DropdownMenuItem>
+              </Link>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -158,22 +164,6 @@ export function Toolbar({
           <Settings className="w-4 h-4" />
         </Button>
       </div>
-
-      <ConnectionDialog 
-        open={isConnOpen} 
-        onOpenChange={setIsConnOpen} 
-        onSave={onAddConnection} 
-        onTest={onTestConnection}
-      />
-      <ProfileDialog 
-        open={isProfOpen} 
-        onOpenChange={setIsProfOpen} 
-        profiles={profiles} 
-        onAdd={onAddProfile} 
-        onDelete={onDeleteProfile} 
-        onDuplicate={onDuplicateProfile}
-        activeProfileId={activeProfileId}
-      />
     </header>
   );
 }

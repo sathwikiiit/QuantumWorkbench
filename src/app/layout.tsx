@@ -1,6 +1,6 @@
-
 import type {Metadata} from 'next';
 import './globals.css';
+import { WorkbenchProvider } from '@/context/WorkbenchContext';
 
 export const metadata: Metadata = {
   title: 'Quantum Workbench | Visual SQL Builder',
@@ -20,7 +20,9 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased bg-background text-foreground">
-        {children}
+        <WorkbenchProvider>
+          {children}
+        </WorkbenchProvider>
       </body>
     </html>
   );

@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useWorkbenchState } from '@/hooks/use-workbench-state';
+import { useWorkbench } from '@/context/WorkbenchContext';
 import { TableNode } from '@/components/workbench/TableNode';
 import { Toolbar } from '@/components/workbench/Toolbar';
 import { SQLPanel } from '@/components/workbench/SQLPanel';
@@ -16,9 +15,8 @@ export default function WorkbenchPage() {
     activeConnectionId,
     setActiveConnectionId,
     addConnection,
-    updateConnection,
-    deleteConnection,
     testConnection,
+    deleteConnection,
     profiles,
     activeProfileId,
     setActiveProfileId,
@@ -44,15 +42,15 @@ export default function WorkbenchPage() {
     rootTableId,
     reachableTables,
     filters,
-    addFilter,
     updateFilter,
     removeFilter,
     sorting,
-    addSort,
     removeSort,
     limit,
-    setLimit
-  } = useWorkbenchState();
+    setLimit,
+    addFilter,
+    addSort
+  } = useWorkbench();
 
   return (
     <div className="h-screen flex flex-col bg-background selection:bg-primary/30 select-none overflow-hidden">
@@ -61,7 +59,7 @@ export default function WorkbenchPage() {
         activeConnectionId={activeConnectionId}
         onConnectionChange={setActiveConnectionId}
         onAddConnection={addConnection}
-        onTestConnection={testConnection}
+        onTestConnection={(conn) => testConnection(conn.id)}
         onDeleteConnection={deleteConnection}
         profiles={profiles}
         activeProfileId={activeProfileId}
