@@ -1,6 +1,6 @@
-
 "use client";
 
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { QueryResult, ExecutionHistoryItem } from '@/lib/types';
@@ -8,6 +8,12 @@ import { Timer, ListFilter, History, Database, BarChart3, ChevronUp } from 'luci
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function BottomPanel({ result, history }: { result: QueryResult | null, history: ExecutionHistoryItem[] }) {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   return (
     <div className="h-full flex flex-col bg-background">
       <Tabs defaultValue="results" className="flex-1 flex flex-col">
@@ -82,7 +88,9 @@ export function BottomPanel({ result, history }: { result: QueryResult | null, h
               {history.map(item => (
                 <div key={item.id} className="p-3 bg-card border rounded-md group hover:border-primary/50 transition-colors">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] text-muted-foreground font-mono">{item.timestamp.toLocaleTimeString()}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {isMounted ? item.timestamp.toLocaleTimeString() : '...'}
+                    </span>
                     <span className="text-[10px] font-bold text-accent uppercase">STATUS: 200 OK</span>
                   </div>
                   <code className="text-[11px] text-muted-foreground line-clamp-1 block mb-2">{item.sql}</code>
