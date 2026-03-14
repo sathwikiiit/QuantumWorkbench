@@ -4,7 +4,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { 
   TableInstance, Join, Column, QueryResult, ExecutionHistoryItem, 
-  Connection, Profile, Filter, SortRule, TableSchema 
+  Connection, Profile, Filter, SortRule, TableSchema, FilterOperator 
 } from '@/lib/types';
 import { REALISTIC_SCHEMA } from '@/lib/mock-schema';
 import { toast } from '@/hooks/use-toast';
@@ -12,15 +12,16 @@ import { toast } from '@/hooks/use-toast';
 export function useWorkbenchState() {
   // --- Connections ---
   const [connections, setConnections] = useState<Connection[]>([
-    { id: 'c1', name: 'Production_v1', type: 'PostgreSQL', host: 'db.prod.internal', port: 5432, databaseName: 'main', username: 'admin', status: 'connected' }
+    { id: 'c1', name: 'Production_v1', type: 'PostgreSQL', host: 'db.prod.internal', port: 5432, databaseName: 'main', username: 'admin', status: 'connected' },
+    { id: 'c2', name: 'Staging_Replica', type: 'MySQL', host: 'db.staging.internal', port: 3306, databaseName: 'staging', username: 'developer', status: 'disconnected' }
   ]);
   const [activeConnectionId, setActiveConnectionId] = useState<string>('c1');
 
-  // --- Profiles & Templates ---
+  // --- Profiles ---
   const [profiles, setProfiles] = useState<Profile[]>([
     {
       id: 'p1',
-      name: 'Default Customer View',
+      name: 'Sales Overview',
       connectionId: 'c1',
       tables: [],
       joins: [],
@@ -28,23 +29,18 @@ export function useWorkbenchState() {
       selectedColumns: [],
       filters: [],
       sorting: [],
-      limit: 100
+      limit: 50
     }
   ]);
   const [activeProfileId, setActiveProfileId] = useState<string>('p1');
 
-  // --- Current Workbench State (Local overrides of profile) ---
-  const currentProfile = useMemo(() => 
-    profiles.find(p => p.id === activeProfileId) || profiles[0],
-  [profiles, activeProfileId]);
-
+  // --- Current Workbench State ---
   const [tables, setTables] = useState<TableInstance[]>([]);
   const [joins, setJoins] = useState<Join[]>([]);
   const [rootTableId, setRootTableId] = useState<string | null>(null);
-  const [selectedColumns, setSelectedColumns] = useState<{ tableId: string; column: string }[]>([]);
   const [filters, setFilters] = useState<Filter[]>([]);
   const [sorting, setSorting] = useState<SortRule[]>([]);
-  const [limit, setLimit] = useState<number>(100);
+  const [limit, setLimit] = useState<number>(50);
 
   // --- UI State ---
   const [generatedSql, setGeneratedSql] = useState<string>('');
@@ -53,7 +49,7 @@ export function useWorkbenchState() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [pendingJoin, setPendingJoin] = useState<{tableId: string, column: string} | null>(null);
 
-  // --- Reachability Logic ---
+  // --- Reachability Engine ---
   const reachableTables = useMemo(() => {
     if (!rootTableId) return new Set<string>();
     const reachable = new Set<string>();
@@ -76,15 +72,17 @@ export function useWorkbenchState() {
     return reachable;
   }, [rootTableId, joins]);
 
-  // --- Sync State when active profile changes ---
+  // --- Profile Switching ---
   useEffect(() => {
-    setTables(currentProfile.tables);
-    setJoins(currentProfile.joins);
-    setRootTableId(currentProfile.rootTableId);
-    setSelectedColumns(currentProfile.selectedColumns);
-    setFilters(currentProfile.filters);
-    setSorting(currentProfile.sorting);
-    setLimit(currentProfile.limit);
+    const p = profiles.find(prof => prof.id === activeProfileId);
+    if (p) {
+      setTables(p.tables || []);
+      setJoins(p.joins || []);
+      setRootTableId(p.rootTableId || null);
+      setFilters(p.filters || []);
+      setSorting(p.sorting || []);
+      setLimit(p.limit || 50);
+    }
   }, [activeProfileId]);
 
   // --- Actions ---
@@ -92,28 +90,29 @@ export function useWorkbenchState() {
     const schema = REALISTIC_SCHEMA.find(s => s.id === schemaId);
     if (!schema) return;
 
+    const newInstanceId = `${schemaId}_${Date.now()}`;
     const newInstance: TableInstance = {
-      id: `${schemaId}_${Date.now()}`,
+      id: newInstanceId,
       schemaId: schema.id,
       name: schema.name,
-      position: { x: 100, y: 100 },
+      position: { x: 100 + (tables.length * 40), y: 100 + (tables.length * 40) },
       pinnedColumns: schema.columns.slice(0, 4).map(c => c.name),
       isRoot: tables.length === 0
     };
 
-    if (tables.length === 0) setRootTableId(newInstance.id);
+    if (tables.length === 0) setRootTableId(newInstanceId);
     setTables(prev => [...prev, newInstance]);
 
-    // Auto-suggest joins based on FKs
+    // Auto-FK Detection
     schema.columns.forEach(col => {
       if (col.isForeignKey && col.references) {
-        const targetTable = tables.find(t => t.name === col.references?.table);
-        if (targetTable) {
+        const target = tables.find(t => t.name === col.references?.table);
+        if (target) {
           const newJoin: Join = {
             id: `join_${Date.now()}_${Math.random()}`,
-            sourceTableId: newInstance.id,
+            sourceTableId: newInstanceId,
             sourceColumn: col.name,
-            targetTableId: targetTable.id,
+            targetTableId: target.id,
             targetColumn: col.references.column,
             type: 'INNER',
             active: true
@@ -127,6 +126,8 @@ export function useWorkbenchState() {
   const removeTableFromCanvas = useCallback((id: string) => {
     setTables(prev => prev.filter(t => t.id !== id));
     setJoins(prev => prev.filter(j => j.sourceTableId !== id && j.targetTableId !== id));
+    setFilters(prev => prev.filter(f => f.tableId !== id));
+    setSorting(prev => prev.filter(s => s.tableId !== id));
     if (rootTableId === id) setRootTableId(null);
   }, [rootTableId]);
 
@@ -149,12 +150,49 @@ export function useWorkbenchState() {
 
   const setAsRoot = useCallback((id: string) => {
     setRootTableId(id);
+    toast({ title: 'Root Table Updated', description: `Query generation now starts from ${tables.find(t => t.id === id)?.name}.` });
+  }, [tables]);
+
+  // --- Filter Management ---
+  const addFilter = useCallback((tableId: string, column: string) => {
+    const newFilter: Filter = {
+      id: `filter-${Date.now()}`,
+      tableId,
+      column,
+      operator: '=',
+      value: ''
+    };
+    setFilters(prev => [...prev, newFilter]);
   }, []);
 
-  // --- Join Logic ---
+  const updateFilter = useCallback((id: string, updates: Partial<Filter>) => {
+    setFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  }, []);
+
+  const removeFilter = useCallback((id: string) => {
+    setFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
+
+  // --- Sort Management ---
+  const addSort = useCallback((tableId: string, column: string) => {
+    const newSort: SortRule = {
+      id: `sort-${Date.now()}`,
+      tableId,
+      column,
+      order: 'ASC'
+    };
+    setSorting(prev => [...prev, newSort]);
+  }, []);
+
+  const removeSort = useCallback((id: string) => {
+    setSorting(prev => prev.filter(s => s.id !== id));
+  }, []);
+
+  // --- Join Management ---
   const handleColumnClick = useCallback((tableId: string, column: string) => {
     if (!pendingJoin) {
       setPendingJoin({ tableId, column });
+      toast({ title: 'Select Target', description: 'Click another column to complete the join.' });
     } else {
       if (pendingJoin.tableId !== tableId) {
         const newJoin: Join = {
@@ -167,19 +205,20 @@ export function useWorkbenchState() {
           active: true
         };
         setJoins(prev => [...prev, newJoin]);
+        toast({ title: 'Join Created', description: 'Relationship added to query graph.' });
       }
       setPendingJoin(null);
     }
   }, [pendingJoin]);
 
   const toggleJoinActive = useCallback((id: string) => {
-    setJoins(prev => prev.map(j => j.id === id && !j.required ? { ...j, active: !j.active } : j));
+    setJoins(prev => prev.map(j => j.id === id ? { ...j, active: !j.active } : j));
   }, []);
 
-  // --- Query Generation ---
+  // --- SQL Generation ---
   useEffect(() => {
     if (!rootTableId) {
-      setGeneratedSql('-- Select a root table to generate SQL');
+      setGeneratedSql('-- Select a root table to start building your query');
       return;
     }
 
@@ -204,15 +243,18 @@ export function useWorkbenchState() {
       }
     });
 
-    if (filters.length > 0) {
-      sql += "\nWHERE " + filters.map(f => {
+    const activeFilters = filters.filter(f => reachableTables.has(f.tableId));
+    if (activeFilters.length > 0) {
+      sql += "\nWHERE " + activeFilters.map(f => {
         const t = tables.find(tbl => tbl.id === f.tableId);
-        return `${t?.name}.${f.column} ${f.operator} ${f.value}`;
+        const val = (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') ? '' : `'${f.value}'`;
+        return `${t?.name}.${f.column} ${f.operator} ${val}`.trim();
       }).join("\n  AND ");
     }
 
-    if (sorting.length > 0) {
-      sql += "\nORDER BY " + sorting.map(s => {
+    const activeSorting = sorting.filter(s => reachableTables.has(s.tableId));
+    if (activeSorting.length > 0) {
+      sql += "\nORDER BY " + activeSorting.map(s => {
         const t = tables.find(tbl => tbl.id === s.tableId);
         return `${t?.name}.${s.column} ${s.order}`;
       }).join(", ");
@@ -225,27 +267,23 @@ export function useWorkbenchState() {
   // --- Execution ---
   const executeQuery = useCallback(async () => {
     if (!rootTableId) {
-      toast({ variant: 'destructive', title: 'Invalid Query', description: 'Please set a root table first.' });
+      toast({ variant: 'destructive', title: 'Invalid Query', description: 'Root table missing.' });
       return;
     }
 
     setIsExecuting(true);
-    // Simulate async connection testing if status is not 'connected'
-    const conn = connections.find(c => c.id === activeConnectionId);
-    
     setTimeout(() => {
-      const success = Math.random() > 0.1;
+      const success = Math.random() > 0.05;
       if (success) {
         const cols = tables.filter(t => reachableTables.has(t.id)).flatMap(t => t.pinnedColumns);
         const mockResult: QueryResult = {
           columns: cols.length > 0 ? cols : ['id', 'status'],
-          rows: Array(Math.floor(Math.random() * 20) + 1).fill(0).map((_, i) => ({
+          rows: Array(Math.min(limit, 10)).fill(0).map((_, i) => ({
             id: i + 1,
-            status: 'active',
-            ...Object.fromEntries(cols.map(c => [c, `value_${i}`]))
+            ...Object.fromEntries(cols.map(c => [c, `mock_val_${i}`]))
           })),
-          executionTimeMs: Math.floor(Math.random() * 200) + 20,
-          rowCount: 5
+          executionTimeMs: Math.floor(Math.random() * 150) + 30,
+          rowCount: Math.min(limit, 10)
         };
         setQueryResult(mockResult);
         setHistory(prev => [{
@@ -256,11 +294,11 @@ export function useWorkbenchState() {
           status: 'success'
         }, ...prev]);
       } else {
-        toast({ variant: 'destructive', title: 'Execution Failed', description: 'Database connection error simulated.' });
+        toast({ variant: 'destructive', title: 'Query Error', description: 'Internal Database Fault simulated.' });
       }
       setIsExecuting(false);
-    }, 1200);
-  }, [rootTableId, generatedSql, activeConnectionId, tables, reachableTables]);
+    }, 1000);
+  }, [rootTableId, generatedSql, limit, tables, reachableTables]);
 
   return {
     connections,
@@ -280,15 +318,19 @@ export function useWorkbenchState() {
     setAsRoot,
     handleColumnClick,
     pendingJoin,
+    toggleJoinActive,
     generatedSql,
     executeQuery,
     isExecuting,
     queryResult,
     history,
     filters,
-    setFilters,
+    addFilter,
+    updateFilter,
+    removeFilter,
     sorting,
-    setSorting,
+    addSort,
+    removeSort,
     limit,
     setLimit
   };

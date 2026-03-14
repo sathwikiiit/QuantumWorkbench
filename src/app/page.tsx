@@ -25,6 +25,7 @@ export default function WorkbenchPage() {
     togglePin, 
     handleColumnClick,
     pendingJoin,
+    toggleJoinActive,
     generatedSql, 
     executeQuery, 
     isExecuting,
@@ -34,11 +35,18 @@ export default function WorkbenchPage() {
     removeTableFromCanvas,
     setAsRoot,
     rootTableId,
-    reachableTables
+    reachableTables,
+    filters,
+    updateFilter,
+    removeFilter,
+    sorting,
+    removeSort,
+    limit,
+    setLimit
   } = useWorkbenchState();
 
   return (
-    <div className="h-screen flex flex-col bg-background selection:bg-primary/30 select-none">
+    <div className="h-screen flex flex-col bg-background selection:bg-primary/30 select-none overflow-hidden">
       <Toolbar 
         connections={connections}
         activeConnectionId={activeConnectionId}
@@ -55,7 +63,7 @@ export default function WorkbenchPage() {
 
         <div className="flex-1 relative overflow-hidden flex flex-col">
           {/* Main Workspace Canvas */}
-          <div className="flex-1 relative overflow-hidden canvas-grid bg-[#12141a]">
+          <div className="flex-1 relative overflow-hidden canvas-grid bg-[#0a0c10]">
             <div className="absolute inset-0 p-20">
               {tables.map(table => (
                 <TableNode 
@@ -75,30 +83,14 @@ export default function WorkbenchPage() {
 
               {/* Dynamic Join Lines */}
               <svg className="absolute inset-0 pointer-events-none w-full h-full">
-                <defs>
-                  <marker
-                    id="arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="0"
-                    refY="3.5"
-                    orient="auto"
-                  >
-                    <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--accent))" />
-                  </marker>
-                </defs>
                 {joins.map((join) => {
                   const source = tables.find(t => t.id === join.sourceTableId);
                   const target = tables.find(t => t.id === join.targetTableId);
                   
                   if (!source || !target) return null;
 
-                  const sourceColIdx = source.pinnedColumns.indexOf(join.sourceColumn);
-                  const targetColIdx = target.pinnedColumns.indexOf(join.targetColumn);
-                  
-                  // If columns aren't pinned, default to top
-                  const sIdx = sourceColIdx !== -1 ? sourceColIdx : 0;
-                  const tIdx = targetColIdx !== -1 ? targetColIdx : 0;
+                  const sIdx = Math.max(0, source.pinnedColumns.indexOf(join.sourceColumn));
+                  const tIdx = Math.max(0, target.pinnedColumns.indexOf(join.targetColumn));
 
                   const startX = source.position.x + 256; 
                   const startY = source.position.y + 110 + (sIdx * 27);
@@ -108,74 +100,90 @@ export default function WorkbenchPage() {
                   const cp1x = startX + (endX - startX) / 2;
                   const pathData = `M ${startX} ${startY} C ${cp1x} ${startY}, ${cp1x} ${endY}, ${endX} ${endY}`;
 
-                  const isReachableJoin = reachableTables.has(join.sourceTableId) && reachableTables.has(join.targetTableId);
+                  const isReachableJoin = join.active && reachableTables.has(join.sourceTableId) && reachableTables.has(join.targetTableId);
 
                   return (
-                    <g key={join.id}>
+                    <g key={join.id} className="transition-all duration-500">
                       <path 
                         d={pathData} 
                         fill="none" 
-                        stroke={isReachableJoin ? "hsl(var(--accent))" : "hsl(var(--muted-foreground) / 0.3)"} 
-                        strokeWidth={isReachableJoin ? "2" : "1"} 
-                        strokeDasharray={isReachableJoin ? "none" : "4 4"}
-                        className="transition-all duration-500"
+                        stroke={isReachableJoin ? "hsl(var(--accent))" : "hsl(var(--muted-foreground) / 0.15)"} 
+                        strokeWidth={isReachableJoin ? "2.5" : "1.5"} 
+                        strokeDasharray={isReachableJoin ? "none" : "5 5"}
+                        className="transition-all duration-300"
                       />
-                      <circle cx={startX} cy={startY} r="3" fill={isReachableJoin ? "hsl(var(--accent))" : "gray"} />
-                      <circle cx={endX} cy={endY} r="3" fill={isReachableJoin ? "hsl(var(--accent))" : "gray"} />
+                      <circle cx={startX} cy={startY} r="3.5" fill={isReachableJoin ? "hsl(var(--accent))" : "#333"} />
+                      <circle cx={endX} cy={endY} r="3.5" fill={isReachableJoin ? "hsl(var(--accent))" : "#333"} />
                     </g>
                   );
                 })}
               </svg>
             </div>
 
-            {/* Canvas Info Overlay */}
+            {/* Canvas Control Overlay */}
             <div className="absolute bottom-6 left-6 flex flex-col gap-3">
-              <div className="px-4 py-2 bg-black/60 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl flex items-center gap-3">
+              <div className="px-5 py-3 bg-black/80 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-2xl flex items-center gap-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Active Tables</span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Active Graph</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xl font-headline font-bold">{tables.length}</span>
-                    <span className="text-[10px] text-primary font-bold">({reachableTables.size} Reachable)</span>
+                    <span className="text-2xl font-headline font-bold">{tables.length}</span>
+                    <span className="text-[10px] text-primary font-black uppercase">Nodes</span>
                   </div>
                 </div>
-                <div className="h-8 w-[1px] bg-white/10" />
+                <div className="h-10 w-[1px] bg-white/10" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Joins</span>
-                  <span className="text-xl font-headline font-bold">{joins.length}</span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Reachable</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-headline font-bold text-accent">{reachableTables.size}</span>
+                    <span className="text-[10px] text-accent font-black uppercase">Nodes</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Canvas Controls Overlay */}
+            {/* Prompt Overlays */}
             <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3">
               {pendingJoin && (
-                <div className="px-6 py-3 bg-accent text-accent-foreground rounded-2xl shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] animate-bounce flex items-center gap-3 border-4 border-white/20">
-                  <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse" />
-                  SELECT TARGET COLUMN TO JOIN
+                <div className="px-6 py-4 bg-accent text-accent-foreground rounded-2xl shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] animate-pulse flex items-center gap-3 border-4 border-white/30">
+                  <div className="w-3 h-3 bg-white rounded-full animate-ping" />
+                  SELECT TARGET COLUMN TO ESTABLISH LINK
                 </div>
               )}
               {!rootTableId && tables.length > 0 && (
-                <div className="px-4 py-2 bg-destructive/80 text-white rounded-lg flex items-center gap-2 text-xs font-bold animate-pulse">
+                <div className="px-5 py-3 bg-destructive/90 text-white rounded-xl flex items-center gap-3 text-xs font-black tracking-widest animate-bounce shadow-2xl">
                   <Anchor className="w-4 h-4" />
-                  SET A ROOT TABLE TO START QUERYING
+                  ANCHOR A ROOT TABLE TO ENABLE SQL
                 </div>
               )}
-              <div className="px-4 py-2 bg-card/40 backdrop-blur-xl rounded-full border border-white/5 shadow-xl text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                NEURAL ENGINE LINKED
-                <Info className="w-3 h-3 ml-2 opacity-50" />
+              <div className="px-4 py-2 bg-card/40 backdrop-blur-md rounded-full border border-white/5 shadow-xl text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_hsl(var(--primary))]" />
+                QUANTUM ENGINE ACTIVE
+                <Info className="w-3.5 h-3.5 ml-2 opacity-50" />
               </div>
             </div>
           </div>
 
-          {/* Bottom Results Area */}
-          <div className="h-1/3 border-t bg-background shadow-2xl z-10">
-            <BottomPanel result={queryResult} history={history} />
+          {/* Bottom Control Center */}
+          <div className="h-[40%] border-t bg-background shadow-2xl z-10">
+            <BottomPanel 
+              result={queryResult} 
+              history={history}
+              filters={filters}
+              onUpdateFilter={updateFilter}
+              onRemoveFilter={removeFilter}
+              sorting={sorting}
+              onRemoveSort={removeSort}
+              joins={joins}
+              onToggleJoin={toggleJoinActive}
+              tables={tables}
+              limit={limit}
+              onLimitChange={setLimit}
+            />
           </div>
         </div>
 
-        {/* Right Preview Panel */}
-        <div className="w-[320px] h-full flex flex-col border-l">
+        {/* SQL Preview & Validation */}
+        <div className="w-[340px] h-full flex flex-col border-l">
            <SQLPanel sql={generatedSql} />
         </div>
       </div>
