@@ -50,6 +50,7 @@ export function useWorkbenchState() {
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [history, setHistory] = useState<ExecutionHistoryItem[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [pendingJoin, setPendingJoin] = useState<{tableId: string, column: string} | null>(null);
 
   const updateTablePosition = useCallback((id: string, x: number, y: number) => {
     setTables(prev => prev.map(t => t.id === id ? { ...t, position: { x, y } } : t));
@@ -67,6 +68,17 @@ export function useWorkbenchState() {
       };
     }));
   }, []);
+
+  const handleColumnClick = useCallback((tableId: string, column: string) => {
+    if (!pendingJoin) {
+      setPendingJoin({ tableId, column });
+    } else {
+      if (pendingJoin.tableId !== tableId) {
+        addJoin(pendingJoin, { tableId, column });
+      }
+      setPendingJoin(null);
+    }
+  }, [pendingJoin]);
 
   const addJoin = useCallback((source: {tableId: string, column: string}, target: {tableId: string, column: string}) => {
     const newJoin: Join = {
@@ -86,24 +98,24 @@ export function useWorkbenchState() {
   }, []);
 
   useEffect(() => {
-    // Basic SQL Generation logic
     const selectLines: string[] = [];
     const fromLines: string[] = [];
     const joinLines: string[] = [];
 
     tables.forEach(table => {
       table.pinnedColumns.forEach(col => {
-        selectLines.push(`  ${table.alias || table.name}.${col}`);
+        selectLines.push(`  ${table.name}.${col}`);
       });
     });
 
     if (tables.length > 0) {
-      fromLines.push(`FROM ${tables[0].name}${tables[0].alias ? ' AS ' + tables[0].alias : ''}`);
+      fromLines.push(`FROM ${tables[0].name}`);
       
       joins.filter(j => j.active).forEach(join => {
         const targetTable = tables.find(t => t.id === join.targetTableId);
-        if (targetTable) {
-          joinLines.push(`${join.type} JOIN ${targetTable.name} ON ${join.sourceTableId}.${join.sourceColumn} = ${join.targetTableId}.${join.targetColumn}`);
+        const sourceTable = tables.find(t => t.id === join.sourceTableId);
+        if (targetTable && sourceTable) {
+          joinLines.push(`INNER JOIN ${targetTable.name} ON ${sourceTable.name}.${join.sourceColumn} = ${targetTable.name}.${join.targetColumn}`);
         }
       });
     }
@@ -114,7 +126,6 @@ export function useWorkbenchState() {
 
   const executeQuery = useCallback(async () => {
     setIsExecuting(true);
-    // Mock execution
     setTimeout(() => {
       const mockResult: QueryResult = {
         columns: tables.flatMap(t => t.pinnedColumns),
@@ -144,6 +155,8 @@ export function useWorkbenchState() {
     setSelectedTableId,
     updateTablePosition,
     togglePin,
+    handleColumnClick,
+    pendingJoin,
     addJoin,
     removeJoin,
     generatedSql,
