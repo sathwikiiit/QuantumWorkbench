@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -8,10 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { 
   Pin, GripHorizontal, Hash, Type, Calendar, Link2, 
-  Trash2, Anchor, Search, X, CheckCircle2, AlertCircle 
+  Trash2, Anchor, Search, X, CheckCircle2, AlertCircle,
+  ListFilter, ArrowUpDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { REALISTIC_SCHEMA } from '@/lib/mock-schema';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TableNodeProps {
   table: TableInstance;
@@ -22,6 +23,8 @@ interface TableNodeProps {
   onColumnClick?: (tableId: string, colName: string) => void;
   onRemove: (id: string) => void;
   onSetRoot: (id: string) => void;
+  onAddFilter: (tableId: string, colName: string) => void;
+  onAddSort: (tableId: string, colName: string) => void;
   isPendingSource?: boolean;
   pendingColumn?: string | null;
 }
@@ -35,6 +38,8 @@ export function TableNode({
   onColumnClick, 
   onRemove,
   onSetRoot,
+  onAddFilter,
+  onAddSort,
   isPendingSource,
   pendingColumn 
 }: TableNodeProps) {
@@ -142,52 +147,90 @@ export function TableNode({
 
         <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
           <div className="max-h-64 overflow-y-auto scrollbar-hide flex-1">
-            {filteredColumns.map((col) => {
-              const isPinned = table.pinnedColumns.includes(col.name);
-              const isSelectedForJoin = pendingColumn === col.name;
-              
-              return (
-                <div 
-                  key={col.name}
-                  id={`col-${table.id}-${col.name}`}
-                  className={cn(
-                    "group/row flex items-center justify-between px-3 py-1.5 text-[11px] border-b border-white/5 hover:bg-white/5 cursor-pointer relative",
-                    isPinned && "bg-primary/5",
-                    isSelectedForJoin && "bg-accent/20"
-                  )}
-                  onClick={() => onTogglePin(table.id, col.name)}
-                >
-                  <div className="flex items-center gap-2 max-w-[140px] truncate">
-                    {getIcon(col.type)}
-                    <span className={cn(
-                      "truncate",
-                      col.isPrimary && "font-bold text-accent underline decoration-accent/30 underline-offset-2",
-                      col.isForeignKey && "text-primary/80"
-                    )}>
-                      {col.name}
-                    </span>
+            <TooltipProvider delayDuration={0}>
+              {filteredColumns.map((col) => {
+                const isPinned = table.pinnedColumns.includes(col.name);
+                const isSelectedForJoin = pendingColumn === col.name;
+                
+                return (
+                  <div 
+                    key={col.name}
+                    id={`col-${table.id}-${col.name}`}
+                    className={cn(
+                      "group/row flex items-center justify-between px-3 py-1.5 text-[11px] border-b border-white/5 hover:bg-white/5 cursor-pointer relative",
+                      isPinned && "bg-primary/5",
+                      isSelectedForJoin && "bg-accent/20"
+                    )}
+                    onClick={() => onTogglePin(table.id, col.name)}
+                  >
+                    <div className="flex items-center gap-2 max-w-[120px] truncate">
+                      {getIcon(col.type)}
+                      <span className={cn(
+                        "truncate",
+                        col.isPrimary && "font-bold text-accent underline decoration-accent/30 underline-offset-2",
+                        col.isForeignKey && "text-primary/80"
+                      )}>
+                        {col.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button 
+                            className="p-1 rounded hover:bg-primary/20 text-muted-foreground opacity-0 group-hover/row:opacity-100 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddFilter(table.id, col.name);
+                            }}
+                          >
+                            <ListFilter className="w-3 h-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">Add Filter</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button 
+                            className="p-1 rounded hover:bg-primary/20 text-muted-foreground opacity-0 group-hover/row:opacity-100 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddSort(table.id, col.name);
+                            }}
+                          >
+                            <ArrowUpDown className="w-3 h-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">Add Sort</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button 
+                            className={cn(
+                              "join-handle p-1 rounded hover:bg-accent/20 transition-all",
+                              isSelectedForJoin ? "text-accent opacity-100" : "text-muted-foreground opacity-0 group-hover/row:opacity-100"
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onColumnClick?.(table.id, col.name);
+                            }}
+                          >
+                            <Link2 className="w-3 h-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">Create Join</TooltipContent>
+                      </Tooltip>
+
+                      <Pin className={cn(
+                        "w-2.5 h-2.5 transition-all ml-1", 
+                        isPinned ? "opacity-100 text-primary scale-110" : "opacity-0 group-hover/row:opacity-40"
+                      )} />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <button 
-                      className={cn(
-                        "join-handle p-1 rounded hover:bg-accent/20 transition-all",
-                        isSelectedForJoin ? "text-accent opacity-100" : "text-muted-foreground opacity-0 group-hover/row:opacity-100"
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onColumnClick?.(table.id, col.name);
-                      }}
-                    >
-                      <Link2 className="w-3 h-3" />
-                    </button>
-                    <Pin className={cn(
-                      "w-2.5 h-2.5 transition-all", 
-                      isPinned ? "opacity-100 text-primary scale-110" : "opacity-0 group-hover/row:opacity-40"
-                    )} />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </TooltipProvider>
           </div>
         </CardContent>
       </Card>

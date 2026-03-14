@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useWorkbenchState } from '@/hooks/use-workbench-state';
@@ -37,9 +36,11 @@ export default function WorkbenchPage() {
     rootTableId,
     reachableTables,
     filters,
+    addFilter,
     updateFilter,
     removeFilter,
     sorting,
+    addSort,
     removeSort,
     limit,
     setLimit
@@ -76,6 +77,8 @@ export default function WorkbenchPage() {
                   onColumnClick={handleColumnClick}
                   onRemove={removeTableFromCanvas}
                   onSetRoot={setAsRoot}
+                  onAddFilter={addFilter}
+                  onAddSort={addSort}
                   isPendingSource={pendingJoin?.tableId === table.id}
                   pendingColumn={pendingJoin?.tableId === table.id ? pendingJoin.column : null}
                 />
