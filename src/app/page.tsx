@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useWorkbenchState } from '@/hooks/use-workbench-state';
@@ -7,7 +8,6 @@ import { SQLPanel } from '@/components/workbench/SQLPanel';
 import { BottomPanel } from '@/components/workbench/BottomPanel';
 import { LeftSidebar } from '@/components/workbench/LeftSidebar';
 import { Toaster } from '@/components/ui/toaster';
-import { cn } from '@/lib/utils';
 import { Anchor, Info } from 'lucide-react';
 
 export default function WorkbenchPage() {
@@ -15,9 +15,17 @@ export default function WorkbenchPage() {
     connections,
     activeConnectionId,
     setActiveConnectionId,
+    addConnection,
+    updateConnection,
+    deleteConnection,
+    testConnection,
     profiles,
     activeProfileId,
     setActiveProfileId,
+    addProfile,
+    deleteProfile,
+    duplicateProfile,
+    saveCurrentToProfile,
     tables, 
     joins,
     updateTablePosition, 
@@ -52,9 +60,16 @@ export default function WorkbenchPage() {
         connections={connections}
         activeConnectionId={activeConnectionId}
         onConnectionChange={setActiveConnectionId}
+        onAddConnection={addConnection}
+        onTestConnection={testConnection}
+        onDeleteConnection={deleteConnection}
         profiles={profiles}
         activeProfileId={activeProfileId}
         onProfileChange={setActiveProfileId}
+        onAddProfile={addProfile}
+        onDeleteProfile={deleteProfile}
+        onDuplicateProfile={duplicateProfile}
+        onSaveProfile={saveCurrentToProfile}
         onExecute={executeQuery} 
         isExecuting={isExecuting} 
       />
@@ -63,7 +78,6 @@ export default function WorkbenchPage() {
         <LeftSidebar onAddTable={addTableToCanvas} />
 
         <div className="flex-1 relative overflow-hidden flex flex-col">
-          {/* Main Workspace Canvas */}
           <div className="flex-1 relative overflow-hidden canvas-grid bg-[#0a0c10]">
             <div className="absolute inset-0 p-20">
               {tables.map(table => (
@@ -84,7 +98,6 @@ export default function WorkbenchPage() {
                 />
               ))}
 
-              {/* Dynamic Join Lines */}
               <svg className="absolute inset-0 pointer-events-none w-full h-full">
                 {joins.map((join) => {
                   const source = tables.find(t => t.id === join.sourceTableId);
@@ -123,7 +136,6 @@ export default function WorkbenchPage() {
               </svg>
             </div>
 
-            {/* Canvas Control Overlay */}
             <div className="absolute bottom-6 left-6 flex flex-col gap-3">
               <div className="px-5 py-3 bg-black/80 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-2xl flex items-center gap-4">
                 <div className="flex flex-col">
@@ -144,7 +156,6 @@ export default function WorkbenchPage() {
               </div>
             </div>
 
-            {/* Prompt Overlays */}
             <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3">
               {pendingJoin && (
                 <div className="px-6 py-4 bg-accent text-accent-foreground rounded-2xl shadow-2xl text-[10px] font-black uppercase tracking-[0.2em] animate-pulse flex items-center gap-3 border-4 border-white/30">
@@ -166,7 +177,6 @@ export default function WorkbenchPage() {
             </div>
           </div>
 
-          {/* Bottom Control Center */}
           <div className="h-[40%] border-t bg-background shadow-2xl z-10">
             <BottomPanel 
               result={queryResult} 
@@ -185,7 +195,6 @@ export default function WorkbenchPage() {
           </div>
         </div>
 
-        {/* SQL Preview & Validation */}
         <div className="w-[340px] h-full flex flex-col border-l">
            <SQLPanel sql={generatedSql} />
         </div>

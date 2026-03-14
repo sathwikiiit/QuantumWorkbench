@@ -3,8 +3,8 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { 
-  TableInstance, Join, Column, QueryResult, ExecutionHistoryItem, 
-  Connection, Profile, Filter, SortRule, TableSchema, FilterOperator 
+  TableInstance, Join, QueryResult, ExecutionHistoryItem, 
+  Connection, Profile, Filter, SortRule 
 } from '@/lib/types';
 import { REALISTIC_SCHEMA } from '@/lib/mock-schema';
 import { toast } from '@/hooks/use-toast';
@@ -17,7 +17,7 @@ export function useWorkbenchState() {
   ]);
   const [activeConnectionId, setActiveConnectionId] = useState<string>('c1');
 
-  // --- Profiles ---
+  // --- Profiles (Templates) ---
   const [profiles, setProfiles] = useState<Profile[]>([
     {
       id: 'p1',
@@ -72,6 +72,86 @@ export function useWorkbenchState() {
     return reachable;
   }, [rootTableId, joins]);
 
+  // --- Connection CRUD ---
+  const addConnection = useCallback((conn: Omit<Connection, 'id' | 'status'>) => {
+    const newConn: Connection = { ...conn, id: `c-${Date.now()}`, status: 'disconnected' };
+    setConnections(prev => [...prev, newConn]);
+    toast({ title: "Connection Added", description: `${conn.name} is ready for testing.` });
+    return newConn.id;
+  }, []);
+
+  const updateConnection = useCallback((id: string, updates: Partial<Connection>) => {
+    setConnections(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, []);
+
+  const deleteConnection = useCallback((id: string) => {
+    setConnections(prev => prev.filter(c => c.id !== id));
+    if (activeConnectionId === id) setActiveConnectionId('');
+  }, [activeConnectionId]);
+
+  const testConnection = useCallback(async (id: string) => {
+    updateConnection(id, { status: 'disconnected' });
+    await new Promise(r => setTimeout(r, 1500));
+    const success = Math.random() > 0.2;
+    updateConnection(id, { status: success ? 'connected' : 'error' });
+    if (!success) toast({ variant: 'destructive', title: 'Connection Failed', description: 'Host unreachable or invalid credentials.' });
+    else toast({ title: 'Success', description: 'Connection established successfully.' });
+    return success;
+  }, [updateConnection]);
+
+  // --- Profile CRUD ---
+  const addProfile = useCallback((name: string) => {
+    const newProfile: Profile = {
+      id: `p-${Date.now()}`,
+      name,
+      connectionId: activeConnectionId,
+      tables: [],
+      joins: [],
+      rootTableId: null,
+      selectedColumns: [],
+      filters: [],
+      sorting: [],
+      limit: 50
+    };
+    setProfiles(prev => [...prev, newProfile]);
+    setActiveProfileId(newProfile.id);
+    toast({ title: "Profile Created", description: `Template ${name} is now active.` });
+  }, [activeConnectionId]);
+
+  const deleteProfile = useCallback((id: string) => {
+    setProfiles(prev => prev.filter(p => p.id !== id));
+    if (activeProfileId === id) setActiveProfileId(profiles[0]?.id || '');
+  }, [activeProfileId, profiles]);
+
+  const duplicateProfile = useCallback((id: string) => {
+    const source = profiles.find(p => p.id === id);
+    if (!source) return;
+    const copy: Profile = { 
+      ...source, 
+      id: `p-copy-${Date.now()}`, 
+      name: `${source.name} (Copy)` 
+    };
+    setProfiles(prev => [...prev, copy]);
+    setActiveProfileId(copy.id);
+    toast({ title: "Profile Duplicated" });
+  }, [profiles]);
+
+  const saveCurrentToProfile = useCallback(() => {
+    setProfiles(prev => prev.map(p => {
+      if (p.id !== activeProfileId) return p;
+      return {
+        ...p,
+        tables,
+        joins,
+        rootTableId,
+        filters,
+        sorting,
+        limit
+      };
+    }));
+    toast({ title: "State Saved", description: "Workbench layout and query parameters persisted to profile." });
+  }, [activeProfileId, tables, joins, rootTableId, filters, sorting, limit]);
+
   // --- Profile Switching ---
   useEffect(() => {
     const p = profiles.find(prof => prof.id === activeProfileId);
@@ -85,7 +165,7 @@ export function useWorkbenchState() {
     }
   }, [activeProfileId]);
 
-  // --- Actions ---
+  // --- Canvas Actions ---
   const addTableToCanvas = useCallback((schemaId: string) => {
     const schema = REALISTIC_SCHEMA.find(s => s.id === schemaId);
     if (!schema) return;
@@ -95,7 +175,7 @@ export function useWorkbenchState() {
       id: newInstanceId,
       schemaId: schema.id,
       name: schema.name,
-      position: { x: 100 + (tables.length * 40), y: 100 + (tables.length * 40) },
+      position: { x: 150 + (tables.length * 50), y: 150 + (tables.length * 50) },
       pinnedColumns: schema.columns.slice(0, 4).map(c => c.name),
       isRoot: tables.length === 0
     };
@@ -150,19 +230,11 @@ export function useWorkbenchState() {
 
   const setAsRoot = useCallback((id: string) => {
     setRootTableId(id);
-    toast({ title: 'Root Table Updated', description: `Query generation now starts from ${tables.find(t => t.id === id)?.name}.` });
+    toast({ title: 'Root Table Updated', description: `Query generation starts from ${tables.find(t => t.id === id)?.name}.` });
   }, [tables]);
 
-  // --- Filter Management ---
   const addFilter = useCallback((tableId: string, column: string) => {
-    const newFilter: Filter = {
-      id: `filter-${Date.now()}`,
-      tableId,
-      column,
-      operator: '=',
-      value: ''
-    };
-    setFilters(prev => [...prev, newFilter]);
+    setFilters(prev => [...prev, { id: `f-${Date.now()}`, tableId, column, operator: '=', value: '' }]);
   }, []);
 
   const updateFilter = useCallback((id: string, updates: Partial<Filter>) => {
@@ -173,39 +245,29 @@ export function useWorkbenchState() {
     setFilters(prev => prev.filter(f => f.id !== id));
   }, []);
 
-  // --- Sort Management ---
   const addSort = useCallback((tableId: string, column: string) => {
-    const newSort: SortRule = {
-      id: `sort-${Date.now()}`,
-      tableId,
-      column,
-      order: 'ASC'
-    };
-    setSorting(prev => [...prev, newSort]);
+    setSorting(prev => [...prev, { id: `s-${Date.now()}`, tableId, column, order: 'ASC' }]);
   }, []);
 
   const removeSort = useCallback((id: string) => {
     setSorting(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  // --- Join Management ---
   const handleColumnClick = useCallback((tableId: string, column: string) => {
     if (!pendingJoin) {
       setPendingJoin({ tableId, column });
-      toast({ title: 'Select Target', description: 'Click another column to complete the join.' });
+      toast({ title: 'Select Target', description: 'Select target column in another table.' });
     } else {
       if (pendingJoin.tableId !== tableId) {
-        const newJoin: Join = {
-          id: `join-${Date.now()}`,
+        setJoins(prev => [...prev, {
+          id: `j-${Date.now()}`,
           sourceTableId: pendingJoin.tableId,
           sourceColumn: pendingJoin.column,
           targetTableId: tableId,
           targetColumn: column,
           type: 'INNER',
           active: true
-        };
-        setJoins(prev => [...prev, newJoin]);
-        toast({ title: 'Join Created', description: 'Relationship added to query graph.' });
+        }]);
       }
       setPendingJoin(null);
     }
@@ -218,7 +280,7 @@ export function useWorkbenchState() {
   // --- SQL Generation ---
   useEffect(() => {
     if (!rootTableId) {
-      setGeneratedSql('-- Select a root table to start building your query');
+      setGeneratedSql('-- Select an anchor root table to begin SQL generation');
       return;
     }
 
@@ -249,9 +311,9 @@ export function useWorkbenchState() {
         const t = tables.find(tbl => tbl.id === f.tableId);
         let val = f.value;
         if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
-          val = '';
+          return `${t?.name}.${f.column} ${f.operator}`;
         }
-        return `${t?.name}.${f.column} ${f.operator} ${val}`.trim();
+        return `${t?.name}.${f.column} ${f.operator} ${val}`;
       }).join("\n  AND ");
     }
 
@@ -267,49 +329,53 @@ export function useWorkbenchState() {
     setGeneratedSql(sql);
   }, [tables, joins, rootTableId, reachableTables, filters, sorting, limit]);
 
-  // --- Execution ---
+  // --- Execution Simulator ---
   const executeQuery = useCallback(async () => {
     if (!rootTableId) {
-      toast({ variant: 'destructive', title: 'Invalid Query', description: 'Root table missing.' });
+      toast({ variant: 'destructive', title: 'Invalid Graph', description: 'No root table anchored.' });
       return;
     }
 
     setIsExecuting(true);
-    setTimeout(() => {
-      const success = Math.random() > 0.05;
-      if (success) {
-        const cols = tables.filter(t => reachableTables.has(t.id)).flatMap(t => t.pinnedColumns);
-        const mockResult: QueryResult = {
-          columns: cols.length > 0 ? cols : ['id', 'status'],
-          rows: Array(Math.min(limit, 10)).fill(0).map((_, i) => ({
-            id: i + 1,
-            ...Object.fromEntries(cols.map(c => [c, `mock_val_${i}`]))
-          })),
-          executionTimeMs: Math.floor(Math.random() * 150) + 30,
-          rowCount: Math.min(limit, 10)
-        };
-        setQueryResult(mockResult);
-        setHistory(prev => [{
-          id: `exec-${Date.now()}`,
-          timestamp: new Date(),
-          sql: generatedSql,
-          metrics: { time: mockResult.executionTimeMs, rows: mockResult.rowCount },
-          status: 'success'
-        }, ...prev]);
-      } else {
-        toast({ variant: 'destructive', title: 'Query Error', description: 'Internal Database Fault simulated.' });
-      }
-      setIsExecuting(false);
-    }, 1000);
-  }, [rootTableId, generatedSql, limit, tables, reachableTables]);
+    await new Promise(r => setTimeout(r, 1200));
+    
+    const cols = tables.filter(t => reachableTables.has(t.id)).flatMap(t => t.pinnedColumns);
+    const mockResult: QueryResult = {
+      columns: cols.length > 0 ? cols : ['id', 'status'],
+      rows: Array(5).fill(0).map((_, i) => ({
+        id: i + 1,
+        ...Object.fromEntries(cols.map(c => [c, `value_${i}`]))
+      })),
+      executionTimeMs: 45 + Math.floor(Math.random() * 100),
+      rowCount: 5
+    };
+
+    setQueryResult(mockResult);
+    setHistory(prev => [{
+      id: `h-${Date.now()}`,
+      timestamp: new Date(),
+      sql: generatedSql,
+      metrics: { time: mockResult.executionTimeMs, rows: mockResult.rowCount },
+      status: 'success'
+    }, ...prev]);
+    setIsExecuting(false);
+  }, [rootTableId, generatedSql, tables, reachableTables]);
 
   return {
     connections,
     activeConnectionId,
     setActiveConnectionId,
+    addConnection,
+    updateConnection,
+    deleteConnection,
+    testConnection,
     profiles,
     activeProfileId,
     setActiveProfileId,
+    addProfile,
+    deleteProfile,
+    duplicateProfile,
+    saveCurrentToProfile,
     tables,
     joins,
     rootTableId,
