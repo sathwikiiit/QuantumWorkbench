@@ -1,6 +1,7 @@
 import { Connection, ExecutionHistoryItem, Profile, QueryResult, TableSchema, WorkbenchState, Template, SavedQuery, Preset } from './types';
 
-// Use environment variable for the API base URL. Fallback to /api for local development/proxy.
+// Use environment variable for the API base URL. 
+// Deactivates relative mock routes if NEXT_PUBLIC_API_URL is missing or set.
 const BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 async function handleResponse<T>(res: Response): Promise<T> {
