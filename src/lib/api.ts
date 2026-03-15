@@ -1,7 +1,7 @@
 import { Connection, ExecutionHistoryItem, Profile, QueryResult, TableSchema, WorkbenchState, Template, SavedQuery, Preset } from './types';
-import { REALISTIC_SCHEMA } from './mock-schema';
 
-const BASE = '/api';
+// Use environment variable for the API base URL. Fallback to /api for local development/proxy.
+const BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -12,18 +12,13 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export async function getSchema(connectionId?: string): Promise<TableSchema[]> {
-  if (!connectionId) return REALISTIC_SCHEMA;
-  const url = `${BASE}/connections/${encodeURIComponent(connectionId)}/schema`;
+  const url = connectionId 
+    ? `${BASE}/connections/${encodeURIComponent(connectionId)}/schema`
+    : `${BASE}/schema`;
 
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    const json = await handleResponse<{ tables: TableSchema[] }>(res);
-    return json.tables;
-  } catch (err) {
-    // If the API is missing/unavailable, fall back to the built-in mock schema
-    console.warn('Failed to load schema from API, falling back to mock schema:', err);
-    return REALISTIC_SCHEMA;
-  }
+  const res = await fetch(url, { cache: 'no-store' });
+  const json = await handleResponse<{ tables: TableSchema[] }>(res);
+  return json.tables;
 }
 
 export async function getConnections(): Promise<Connection[]> {
@@ -150,7 +145,6 @@ export async function appendHistory(item: Omit<ExecutionHistoryItem, 'id'>): Pro
   return handleResponse<ExecutionHistoryItem>(res);
 }
 
-// Templates (reusable join graphs)
 export async function getTemplates(): Promise<Template[]> {
   const res = await fetch(`${BASE}/templates`, { cache: 'no-store' });
   return handleResponse<Template[]>(res);
@@ -178,7 +172,6 @@ export async function deleteTemplate(id: string): Promise<void> {
   await fetch(`${BASE}/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-// Saved queries
 export async function getSavedQueries(): Promise<SavedQuery[]> {
   const res = await fetch(`${BASE}/saved-queries`, { cache: 'no-store' });
   return handleResponse<SavedQuery[]>(res);
@@ -206,7 +199,6 @@ export async function deleteSavedQuery(id: string): Promise<void> {
   await fetch(`${BASE}/saved-queries/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-// Parameter presets
 export async function getPresets(): Promise<Preset[]> {
   const res = await fetch(`${BASE}/presets`, { cache: 'no-store' });
   return handleResponse<Preset[]>(res);

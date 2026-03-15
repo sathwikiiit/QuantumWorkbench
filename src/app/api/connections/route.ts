@@ -1,19 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { connections, createId } from '@/lib/mock-store';
-import type { Connection } from '@/lib/types';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
-  return NextResponse.json(connections);
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const conn: Omit<Connection, 'id' | 'status'> = body;
-  const newConn: Connection = {
-    ...conn,
-    id: createId('c'),
-    status: 'disconnected'
-  };
-  connections.push(newConn);
-  return NextResponse.json(newConn, { status: 201 });
+export async function POST() {
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }

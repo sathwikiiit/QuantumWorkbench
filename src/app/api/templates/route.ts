@@ -1,16 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { templates, createId } from '@/lib/mock-store';
-import type { Template } from '@/lib/types';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
-  return NextResponse.json(templates);
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const template: Omit<Template, 'id' | 'createdAt' | 'updatedAt'> = body;
-  const now = new Date().toISOString();
-  const newTemplate: Template = { ...template, id: createId('t'), createdAt: now, updatedAt: now };
-  templates.push(newTemplate);
-  return NextResponse.json(newTemplate, { status: 201 });
+export async function POST() {
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }

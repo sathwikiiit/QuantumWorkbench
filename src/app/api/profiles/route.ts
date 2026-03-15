@@ -1,15 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { profiles, createId } from '@/lib/mock-store';
-import type { Profile } from '@/lib/types';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
-  return NextResponse.json(profiles);
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const profile: Omit<Profile, 'id'> = body;
-  const newProfile: Profile = { ...profile, id: createId('p') };
-  profiles.push(newProfile);
-  return NextResponse.json(newProfile, { status: 201 });
+export async function POST() {
+  return new NextResponse('Mock endpoint removed. Configure NEXT_PUBLIC_API_URL.', { status: 410 });
 }

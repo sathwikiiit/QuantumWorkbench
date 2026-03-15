@@ -1,29 +1,28 @@
-
 # Quantum Workbench | Technical Guide
 
 This document outlines the API architecture and frontend implementation logic for the Quantum Workbench SQL Builder.
 
-## 1. System Architecture
+## 1. External API Configuration
 
-The application is built using a **Centralized Context Pattern**. 
-- **`WorkbenchContext`**: Acts as the "Brain" of the application. It manages the state for connections, profiles (templates), the canvas layout, and the generated query logic.
-- **Graph Engine**: A reactive computation layer inside the context that calculates "Reachable Tables" starting from a user-defined **Root Table** (Anchor) through active **Joins**.
+To point the workbench to your own backend, set the following environment variable:
 
----
+`NEXT_PUBLIC_API_URL=https://your-backend-api.com`
 
-## 2. API Endpoints
+If this variable is not set, the application will attempt to call local `/api` routes (which have been deactivated in this version).
 
-All endpoints are hosted under `/api/*` and use JSON for requests/responses.
+## 2. API Endpoints Specification
+
+All endpoints are expected to follow JSON standards.
 
 ### 2.1 Connections
-- `GET /api/connections`: List all sources.
-- `POST /api/connections`: Register a new source.
-- `PUT /api/connections/:id`: Update source metadata.
-- `DELETE /api/connections/:id`: Remove a source.
-- `POST /api/connections/:id/test`: Simulates connectivity test.
-- `GET /api/connections/:id/schema`: Returns hierarchical table metadata.
+- `GET /connections`: List all sources.
+- `POST /connections`: Register a new source.
+- `PUT /connections/:id`: Update source metadata.
+- `DELETE /connections/:id`: Remove a source.
+- `POST /connections/:id/test`: Connectivity test. Returns `{ "status": "connected" | "error", "message": "string" }`.
+- `GET /connections/:id/schema`: Returns hierarchical table metadata.
 
-**Response Schema (`GET /api/connections/:id/schema`):**
+**Response Schema (`GET /connections/:id/schema`):**
 ```json
 {
   "tables": [
@@ -34,37 +33,28 @@ All endpoints are hosted under `/api/*` and use JSON for requests/responses.
       "columns": [
         { "name": "id", "type": "uuid", "isPrimary": true },
         { "name": "email", "type": "varchar" }
-      ],
-      "foreignKeys": []
+      ]
     }
   ]
 }
 ```
 
-### 2.2 Profiles & Templates
-- `GET /api/profiles`: List saved profiles.
-- `POST /api/profiles`: Save current canvas.
-- `GET /api/templates`: List reusable workbench templates.
-- `POST /api/templates`: Create template from current state.
+### 2.2 Profiles
+- `GET /profiles`: List saved workbench profiles.
+- `POST /profiles`: Save current canvas state.
 
-### 2.3 Query Execution & Validation
-- `POST /api/query/execute`: Executes a structured query.
-- `POST /api/query/validate`: Validates graph connectivity.
+### 2.3 Query Execution
+- `POST /query/execute`: Executes a structured query.
+- `POST /query/validate`: Validates graph connectivity.
 
-**Request Body (`POST /api/query/execute`):**
+**Request Body (`POST /query/execute`):**
 ```json
 {
   "connectionId": "c1",
   "rootTableId": "orders_123",
-  "joins": [
-    { "sourceTableId": "orders_123", "targetTableId": "customers_456", "type": "INNER", "active": true }
-  ],
-  "selectedColumns": [
-    { "tableId": "orders_123", "column": "total_amount" }
-  ],
-  "filters": [
-    { "tableId": "orders_123", "column": "status", "operator": "=", "value": "paid" }
-  ],
+  "joins": [...],
+  "selectedColumns": [...],
+  "filters": [...],
   "limit": 50
 }
 ```
@@ -73,12 +63,11 @@ All endpoints are hosted under `/api/*` and use JSON for requests/responses.
 
 ## 3. Implementation Logic
 
-### 3.1 Hierarchical Schema Browser
-The Left Sidebar uses a `useMemo` hook to group flat table metadata from the API into a `Record<string, TableSchema[]>` keyed by `schemaName`. This enables the multi-level accordion view.
+### 3.1 Graph Engine
+The application manages state through `WorkbenchContext`. It calculates table reachability reactively. If a table is added but not connected to the "Root Table" (Anchor), it is excluded from SQL generation.
 
 ### 3.2 SQL Generation
-The SQL is generated reactively. Whenever the `tables`, `joins`, `filters`, or `sorting` state changes, the `WorkbenchContext` performs the following:
-1. **Compute Reachability**: Starting from the `rootTableId`, it traverses the `joins` array to find all reachable `TableInstances`.
-2. **SELECT Clause**: Maps through `reachableTables` and gathers all `pinnedColumns`.
-3. **JOIN Clause**: Filters `joins` for active connections between two reachable tables.
-4. **WHERE Clause**: Processes `filters`, handling raw values and operators like `IN` or `IS NULL`.
+The SQL is built dynamically based on the current canvas state:
+1. **SELECT**: Gathers all pinned columns from reachable tables.
+2. **JOIN**: Iterates through active joins between reachable tables.
+3. **WHERE**: Processes filters (supports `=`, `>`, `LIKE`, `IN`, `IS NULL`, etc.).
