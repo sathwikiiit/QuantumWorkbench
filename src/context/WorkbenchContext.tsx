@@ -58,6 +58,7 @@ interface WorkbenchContextType {
 
   templates: Template[];
   saveTemplate: (name: string, connectionId?: string) => Promise<void>;
+  updateTemplate: (id: string, updates: Partial<Template>) => Promise<void>;
   applyTemplate: (template: Template) => void;
   deleteTemplate: (id: string) => Promise<void>;
 
@@ -102,13 +103,11 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [pendingJoin, setPendingJoin] = useState<{tableId: string, column: string} | null>(null);
 
-  // Initial data load
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
-        const [connectionsData, profilesData, historyData, templatesData, savedQueriesData, presetsData] = await Promise.all([
+        const [conn, prof, hist, templ, saved, pre] = await Promise.all([
           api.getConnections().catch(() => []),
           api.getProfiles().catch(() => []),
           api.getHistory().catch(() => []),
@@ -116,44 +115,31 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
           api.getSavedQueries().catch(() => []),
           api.getPresets().catch(() => [])
         ]);
-
         if (cancelled) return;
-
-        setConnections(connectionsData);
-        setProfiles(profilesData);
-        setHistory(historyData);
-        setTemplates(templatesData);
-        setSavedQueries(savedQueriesData);
-        setPresets(presetsData);
-
-        if (connectionsData.length > 0) {
-          setActiveConnectionId(connectionsData[0].id);
-        }
-        if (profilesData.length > 0) {
-          setActiveProfileId(profilesData[0].id);
-        }
+        setConnections(conn);
+        setProfiles(prof);
+        setHistory(hist);
+        setTemplates(templ);
+        setSavedQueries(saved);
+        setPresets(pre);
+        if (conn.length > 0 && !activeConnectionId) setActiveConnectionId(conn[0].id);
+        if (prof.length > 0 && !activeProfileId) setActiveProfileId(prof[0].id);
       } catch (error) {
-        console.error('Failed to load initial workbench data', error);
+        console.error('Failed initial load', error);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // Schema fetching
   useEffect(() => {
     if (!activeConnectionId) {
       setSchema([]);
       return;
     }
-
     if (schemaCache[activeConnectionId]) {
       setSchema(schemaCache[activeConnectionId]);
       return;
     }
-
     let cancelled = false;
     (async () => {
       try {
@@ -162,19 +148,11 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
         setSchema(schemaData);
         setSchemaCache(prev => ({ ...prev, [activeConnectionId]: schemaData }));
       } catch (error) {
-        console.error('Failed to load schema for connection', activeConnectionId, error);
-        toast({ 
-          variant: 'destructive', 
-          title: 'Schema Load Failed', 
-          description: 'Could not retrieve database metadata from the backend.' 
-        });
+        console.error('Schema fetch failed', error);
         setSchema([]);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [activeConnectionId, schemaCache]);
 
   const reachableTables = useMemo(() => {
@@ -182,7 +160,6 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     const reachable = new Set<string>();
     const queue = [rootTableId];
     reachable.add(rootTableId);
-
     while (queue.length > 0) {
       const currentId = queue.shift()!;
       joins.forEach(join => {
@@ -202,7 +179,6 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const addConnection = useCallback(async (conn: Omit<Connection, 'id' | 'status'>) => {
     const newConn = await api.createConnection(conn);
     setConnections(prev => [...prev, newConn]);
-    toast({ title: "Connection Added", description: `${conn.name} is ready for testing.` });
     return newConn.id;
   }, []);
 
@@ -213,27 +189,12 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
 
   const deleteConnection = useCallback(async (id: string) => {
     await api.deleteConnection(id);
-    setConnections(prev => {
-      const next = prev.filter(c => c.id !== id);
-      if (activeConnectionId === id) {
-        if (next.length > 0) {
-          setActiveConnectionId(next[0].id);
-        } else {
-          setActiveConnectionId('');
-        }
-      }
-      return next;
-    });
-  }, [activeConnectionId]);
+    setConnections(prev => prev.filter(c => c.id !== id));
+  }, []);
 
   const testConnection = useCallback(async (id: string) => {
     const result = await api.testConnection(id);
     setConnections(prev => prev.map(c => c.id === id ? { ...c, status: result.status } : c));
-    if (result.status === 'error') {
-      toast({ variant: 'destructive', title: 'Connection Failed', description: result.message ?? 'Host unreachable or invalid credentials.' });
-    } else {
-      toast({ title: 'Success', description: 'Connection established successfully.' });
-    }
     return result.status === 'connected';
   }, []);
 
@@ -251,57 +212,42 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     });
     setProfiles(prev => [...prev, newProfile]);
     setActiveProfileId(newProfile.id);
-    toast({ title: "Profile Created", description: `Template ${name} is now active.` });
   }, [activeConnectionId]);
 
   const deleteProfile = useCallback(async (id: string) => {
     await api.deleteProfile(id);
     setProfiles(prev => prev.filter(p => p.id !== id));
-    if (activeProfileId === id) setActiveProfileId(profiles[0]?.id || '');
-  }, [activeProfileId, profiles]);
+  }, []);
 
   const duplicateProfile = useCallback(async (id: string) => {
     const copy = await api.duplicateProfile(id);
     setProfiles(prev => [...prev, copy]);
     setActiveProfileId(copy.id);
-    toast({ title: "Profile Duplicated" });
   }, []);
 
   const saveCurrentToProfile = useCallback(async () => {
     if (!activeProfileId) return;
     const updated = await api.updateProfile(activeProfileId, {
-      tables,
-      joins,
-      rootTableId,
-      filters,
-      sorting,
-      limit
+      tables, joins, rootTableId, filters, sorting, limit, connectionId: activeConnectionId
     });
     setProfiles(prev => prev.map(p => p.id === activeProfileId ? updated : p));
-    toast({ title: "State Saved", description: "Workbench layout and query parameters persisted to profile." });
-  }, [activeProfileId, tables, joins, rootTableId, filters, sorting, limit]);
+    toast({ title: "Profile Saved" });
+  }, [activeProfileId, activeConnectionId, tables, joins, rootTableId, filters, sorting, limit]);
 
   const saveTemplate = useCallback(async (name: string, connectionId?: string) => {
     const cid = connectionId || activeConnectionId;
-    if (!cid) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No connection selected.' });
-      return;
-    }
     const newTemplate = await api.createTemplate({
-      name,
-      connectionId: cid,
-      tables,
-      joins,
-      rootTableId,
+      name, connectionId: cid, tables, joins, rootTableId, 
       selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-      filters,
-      sorting,
-      limit,
-      schemaSnapshotVersion: `v-${Date.now()}`
+      filters, sorting, limit, createdAt: new Date().toISOString()
     });
     setTemplates(prev => [...prev, newTemplate]);
-    toast({ title: "Template Saved", description: `${name} saved for reuse.` });
   }, [activeConnectionId, tables, joins, rootTableId, filters, sorting, limit]);
+
+  const updateTemplate = useCallback(async (id: string, updates: Partial<Template>) => {
+    const updated = await api.updateTemplate(id, updates);
+    setTemplates(prev => prev.map(t => t.id === id ? updated : t));
+  }, []);
 
   const applyTemplate = useCallback((template: Template) => {
     setActiveConnectionId(template.connectionId);
@@ -311,8 +257,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setFilters(template.filters);
     setSorting(template.sorting);
     setLimit(template.limit);
-    setParamSet({});
-    toast({ title: "Template Applied", description: `${template.name} loaded into workbench.` });
+    toast({ title: "Template Applied" });
   }, []);
 
   const deleteTemplate = useCallback(async (id: string) => {
@@ -320,58 +265,25 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setTemplates(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const saveQuery = useCallback(async (name: string, templateId: string, description?: string) => {
-    const enabledJoins = joins.filter(j => j.active).map(j => j.id);
-    const selectedColumns = tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col })));
+  const saveQuery = useCallback(async (name: string, templateId: string) => {
     const newQuery = await api.createSavedQuery({
-      name,
-      connectionId: activeConnectionId,
-      templateId,
-      sql: generatedSql,
-      description,
-      enabledJoins,
-      selectedColumns,
-      filters,
-      sorting,
-      limit,
-      params
+      name, connectionId: activeConnectionId, templateId, sql: generatedSql,
+      enabledJoins: joins.filter(j => j.active).map(j => j.id),
+      selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
+      filters, sorting, limit, params, createdAt: new Date().toISOString()
     });
     setSavedQueries(prev => [...prev, newQuery]);
-    toast({ title: "Saved Query Created", description: `${name} is now available in saved queries.` });
   }, [activeConnectionId, generatedSql, joins, tables, filters, sorting, limit, params]);
 
   const applySavedQuery = useCallback(async (query: SavedQuery) => {
-    if (query.connectionId) {
-      setActiveConnectionId(query.connectionId);
-    }
-
+    setActiveConnectionId(query.connectionId);
     const template = templates.find(t => t.id === query.templateId);
-    if (template) {
-      applyTemplate(template);
-    }
-
+    if (template) applyTemplate(template);
     setJoins(prev => prev.map(j => ({ ...j, active: query.enabledJoins.includes(j.id) })));
-
-    setTables(prev => prev.map(t => {
-      const selected = query.selectedColumns
-        .filter(sc => sc.tableId === t.id)
-        .map(sc => sc.column);
-      if (selected.length > 0) {
-        return { ...t, pinnedColumns: selected };
-      }
-      return t;
-    }));
-
     setFilters(query.filters);
     setSorting(query.sorting);
     setLimit(query.limit);
-    setParamSet(query.params || {});
-
-    if (query.sql) {
-      setGeneratedSql(query.sql);
-    }
-
-    toast({ title: "Saved Query Applied", description: `${query.name} loaded into workbench.` });
+    setParams(query.params || {});
   }, [templates, applyTemplate]);
 
   const deleteSavedQuery = useCallback(async (id: string) => {
@@ -380,14 +292,12 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const savePreset = useCallback(async (name: string, params: Record<string, string>) => {
-    const newPreset = await api.createPreset({ name, params });
+    const newPreset = await api.createPreset({ name, params, createdAt: new Date().toISOString() });
     setPresets(prev => [...prev, newPreset]);
-    toast({ title: "Preset Saved", description: `${name} saved for later use.` });
   }, []);
 
   const applyPreset = useCallback((preset: Preset) => {
-    setParamSet(preset.params);
-    toast({ title: "Preset Applied", description: `${preset.name} parameters loaded.` });
+    setParams(preset.params);
   }, []);
 
   const deletePreset = useCallback(async (id: string) => {
@@ -411,46 +321,20 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const addTableToCanvas = useCallback((schemaId: string) => {
     const tableSchema = schema.find(s => s.id === schemaId);
     if (!tableSchema) return;
-
     const newInstanceId = `${schemaId}_${Date.now()}`;
     const newInstance: TableInstance = {
-      id: newInstanceId,
-      schemaId: tableSchema.id,
-      name: tableSchema.name,
+      id: newInstanceId, schemaId: tableSchema.id, name: tableSchema.name,
       position: { x: 150 + (tables.length * 50), y: 150 + (tables.length * 50) },
       pinnedColumns: tableSchema.columns.slice(0, 4).map(c => c.name),
       isRoot: tables.length === 0
     };
-
     if (tables.length === 0) setRootTableId(newInstanceId);
     setTables(prev => [...prev, newInstance]);
-
-    tableSchema.columns.forEach(col => {
-      if (col.isForeignKey && col.references) {
-        const target = tables.find(t => t.name === col.references?.table);
-        if (target) {
-          const newJoin: Join = {
-            id: `join_${Date.now()}_${Math.random()}`,
-            sourceTableId: newInstanceId,
-            sourceColumn: col.name,
-            targetTableId: target.id,
-            targetColumn: col.references.column,
-            type: 'INNER',
-            active: true,
-            required: true,
-            source: 'auto'
-          };
-          setJoins(prev => [...prev, newJoin]);
-        }
-      }
-    });
   }, [tables, schema]);
 
   const removeTableFromCanvas = useCallback((id: string) => {
     setTables(prev => prev.filter(t => t.id !== id));
     setJoins(prev => prev.filter(j => j.sourceTableId !== id && j.targetTableId !== id));
-    setFilters(prev => prev.filter(f => f.tableId !== id));
-    setSorting(prev => prev.filter(s => s.tableId !== id));
     if (rootTableId === id) setRootTableId(null);
   }, [rootTableId]);
 
@@ -462,36 +346,20 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setTables(prev => prev.map(t => {
       if (t.id !== tableId) return t;
       const isPinned = t.pinnedColumns.includes(colName);
-      return {
-        ...t,
-        pinnedColumns: isPinned 
-          ? t.pinnedColumns.filter(c => c !== colName) 
-          : [...t.pinnedColumns, colName]
-      };
+      return { ...t, pinnedColumns: isPinned ? t.pinnedColumns.filter(c => c !== colName) : [...t.pinnedColumns, colName] };
     }));
   }, []);
 
-  const setAsRoot = useCallback((id: string) => {
-    setRootTableId(id);
-    toast({ title: 'Root Table Updated', description: `Query generation starts from ${tables.find(t => t.id === id)?.name}.` });
-  }, [tables]);
+  const setAsRoot = useCallback((id: string) => { setRootTableId(id); }, []);
 
   const handleColumnClick = useCallback((tableId: string, column: string) => {
     if (!pendingJoin) {
       setPendingJoin({ tableId, column });
-      toast({ title: 'Select Target', description: 'Select target column in another table.' });
     } else {
       if (pendingJoin.tableId !== tableId) {
         setJoins(prev => [...prev, {
-          id: `j-${Date.now()}`,
-          sourceTableId: pendingJoin.tableId,
-          sourceColumn: pendingJoin.column,
-          targetTableId: tableId,
-          targetColumn: column,
-          type: 'INNER',
-          active: true,
-          required: false,
-          source: 'manual'
+          id: `j-${Date.now()}`, sourceTableId: pendingJoin.tableId, sourceColumn: pendingJoin.column,
+          targetTableId: tableId, targetColumn: column, type: 'INNER', active: true, source: 'manual'
         }]);
       }
       setPendingJoin(null);
@@ -503,44 +371,27 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!rootTableId) {
-      setGeneratedSql('-- Select an anchor root table to begin SQL generation');
-      return;
-    }
-
+    if (!rootTableId) { setGeneratedSql('-- Anchor a root table to begin SQL generation'); return; }
     const rootTable = tables.find(t => t.id === rootTableId);
     if (!rootTable) return;
-
     const activeReachableTables = tables.filter(t => reachableTables.has(t.id));
-    
     let sql = "SELECT\n";
-    const selectCols = activeReachableTables.flatMap(t => 
-      t.pinnedColumns.map(col => `  ${t.name}.${col}`)
-    );
+    const selectCols = activeReachableTables.flatMap(t => t.pinnedColumns.map(col => `  ${t.name}.${col}`));
     sql += selectCols.length > 0 ? selectCols.join(",\n") : "  *";
-    
     sql += `\nFROM ${rootTable.name}`;
-
     joins.filter(j => j.active && reachableTables.has(j.sourceTableId) && reachableTables.has(j.targetTableId)).forEach(join => {
-      const source = tables.find(t => t.id === join.sourceTableId);
       const target = tables.find(t => t.id === join.targetTableId);
-      if (source && target) {
-        sql += `\n${join.type} JOIN ${target.name} ON ${source.name}.${join.sourceColumn} = ${target.name}.${join.targetColumn}`;
-      }
+      const source = tables.find(t => t.id === join.sourceTableId);
+      if (source && target) sql += `\n${join.type} JOIN ${target.name} ON ${source.name}.${join.sourceColumn} = ${target.name}.${join.targetColumn}`;
     });
-
     const activeFilters = filters.filter(f => reachableTables.has(f.tableId));
     if (activeFilters.length > 0) {
       sql += "\nWHERE " + activeFilters.map(f => {
         const t = tables.find(tbl => tbl.id === f.tableId);
-        let val = f.value;
-        if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
-          return `${t?.name}.${f.column} ${f.operator}`;
-        }
-        return `${t?.name}.${f.column} ${f.operator} ${val}`;
+        if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') return `${t?.name}.${f.column} ${f.operator}`;
+        return `${t?.name}.${f.column} ${f.operator} ${f.value}`;
       }).join("\n  AND ");
     }
-
     const activeSorting = sorting.filter(s => reachableTables.has(s.tableId));
     if (activeSorting.length > 0) {
       sql += "\nORDER BY " + activeSorting.map(s => {
@@ -548,186 +399,53 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
         return `${t?.name}.${s.column} ${s.order}`;
       }).join(", ");
     }
-
     sql += `\nLIMIT ${limit};`;
     setGeneratedSql(sql);
   }, [tables, joins, rootTableId, reachableTables, filters, sorting, limit]);
 
-  const buildStructuredQuery = useCallback(() => {
-    return {
-      connectionId: activeConnectionId,
-      rootTableId,
-      joins: joins.map(j => ({
-        id: j.id,
-        sourceTableId: j.sourceTableId,
-        sourceColumn: j.sourceColumn,
-        targetTableId: j.targetTableId,
-        targetColumn: j.targetColumn,
-        type: j.type,
-        active: j.active,
-        required: j.required,
-        source: j.source
-      })),
-      selectedColumns: tables.flatMap(t =>
-        t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))
-      ),
-      filters: filters.map(f => ({ tableId: f.tableId, column: f.column, operator: f.operator, value: f.value })),
-      sorting: sorting.map(s => ({ tableId: s.tableId, column: s.column, order: s.order })),
-      limit,
-      params
-    };
-  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
-
   const executeQuery = useCallback(async () => {
-    if (!rootTableId) {
-      toast({ variant: 'destructive', title: 'Invalid Graph', description: 'No root table anchored.' });
-      return;
-    }
-
+    if (!rootTableId) return;
     setIsExecuting(true);
     try {
-      const payload = buildStructuredQuery();
-      const validation = await api.validateQuery(payload);
-      if (!validation.valid) {
-        toast({ variant: 'destructive', title: 'Query Validation Failed', description: validation.errors.join(' ') });
-        setIsExecuting(false);
-        return;
-      }
-      if (validation.warnings.length > 0) {
-        toast({ title: 'Query Warnings', description: validation.warnings.join(' ') });
-      }
-
+      const payload = {
+        connectionId: activeConnectionId, rootTableId, limit, params,
+        joins: joins.map(j => ({ ...j })),
+        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
+        filters: filters.map(f => ({ ...f })),
+        sorting: sorting.map(s => ({ ...s }))
+      };
       const result = await api.executeQuery(payload);
       setQueryResult(result);
-
-      const historyItem = await api.appendHistory({
-        timestamp: new Date().toISOString(),
-        connectionId: activeConnectionId,
-        sql: result.sql,
-        params,
-        metrics: { time: result.executionTimeMs, rows: result.rowCount },
-        status: 'success'
+      const hist = await api.appendHistory({
+        timestamp: new Date().toISOString(), connectionId: activeConnectionId, sql: result.sql,
+        metrics: { time: result.executionTimeMs, rows: result.rowCount }, status: 'success', params
       });
-
-      setHistory(prev => [historyItem, ...prev]);
-    } catch (error: any) {
+      setHistory(prev => [hist, ...prev]);
+    } catch (error) {
       console.error(error);
-      toast({ variant: 'destructive', title: 'Query Failed', description: 'There was an error executing your query.' });
-      await api.appendHistory({
-        timestamp: new Date().toISOString(),
-        connectionId: activeConnectionId,
-        sql: generatedSql,
-        params,
-        metrics: { time: 0, rows: 0 },
-        status: 'error',
-        errorMessage: error?.message ?? String(error)
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [buildStructuredQuery, rootTableId, activeConnectionId, generatedSql, params]);
+      toast({ variant: 'destructive', title: 'Query Failed' });
+    } finally { setIsExecuting(false); }
+  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
 
-  const addFilter = useCallback((tableId: string, column: string) => {
-    setFilters(prev => [...prev, { id: `f-${Date.now()}`, tableId, column, operator: '=', value: '' }]);
-  }, []);
-
-  const updateFilter = useCallback((id: string, updates: Partial<Filter>) => {
-    setFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
-  }, []);
-
-  const removeFilter = useCallback((id: string) => {
-    setFilters(prev => prev.filter(f => f.id !== id));
-  }, []);
-
-  const addSort = useCallback((tableId: string, column: string) => {
-    setSorting(prev => [...prev, { id: `s-${Date.now()}`, tableId, column, order: 'ASC' }]);
-  }, []);
-
-  const removeSort = useCallback((id: string) => {
-    setSorting(prev => prev.filter(s => s.id !== id));
-  }, []);
-
-  const setParam = useCallback((key: string, value: string) => {
-    setParams(prev => ({ ...prev, [key]: value }));
-  }, []);
-
-  const removeParam = useCallback((key: string) => {
-    setParams(prev => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }, []);
-
+  const addFilter = useCallback((tableId: string, column: string) => { setFilters(prev => [...prev, { id: `f-${Date.now()}`, tableId, column, operator: '=', value: '' }]); }, []);
+  const updateFilter = useCallback((id: string, updates: Partial<Filter>) => { setFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f)); }, []);
+  const removeFilter = useCallback((id: string) => { setFilters(prev => prev.filter(f => f.id !== id)); }, []);
+  const addSort = useCallback((tableId: string, column: string) => { setSorting(prev => [...prev, { id: `s-${Date.now()}`, tableId, column, order: 'ASC' }]); }, []);
+  const removeSort = useCallback((id: string) => { setSorting(prev => prev.filter(s => s.id !== id)); }, []);
+  const setParam = useCallback((key: string, value: string) => { setParams(prev => ({ ...prev, [key]: value })); }, []);
+  const removeParam = useCallback((key: string) => { setParams(prev => { const n = { ...prev }; delete n[key]; return n; }); }, []);
   const clearParams = useCallback(() => setParams({}), []);
-  const setParamSet = useCallback((ps: Record<string, string>) => setParams(ps), []);
-
-  const value = {
-    schema,
-    connections,
-    activeConnectionId,
-    setActiveConnectionId,
-    addConnection,
-    updateConnection,
-    deleteConnection,
-    testConnection,
-    profiles,
-    activeProfileId,
-    setActiveProfileId,
-    addProfile,
-    deleteProfile,
-    duplicateProfile,
-    saveCurrentToProfile,
-
-    templates,
-    saveTemplate,
-    applyTemplate,
-    deleteTemplate,
-
-    savedQueries,
-    saveQuery,
-    applySavedQuery,
-    deleteSavedQuery,
-
-    presets,
-    savePreset,
-    applyPreset,
-    deletePreset,
-
-    tables,
-    joins,
-    rootTableId,
-    reachableTables,
-    addTableToCanvas,
-    removeTableFromCanvas,
-    updateTablePosition,
-    togglePin,
-    setAsRoot,
-    handleColumnClick,
-    pendingJoin,
-    toggleJoinActive,
-    generatedSql,
-    executeQuery,
-    isExecuting,
-    queryResult,
-    history,
-    filters,
-    addFilter,
-    updateFilter,
-    removeFilter,
-    sorting,
-    addSort,
-    removeSort,
-    limit,
-    setLimit,
-    params,
-    setParam,
-    removeParam,
-    clearParams,
-  };
 
   return (
-    <WorkbenchContext.Provider value={value}>
+    <WorkbenchContext.Provider value={{
+      schema, connections, activeConnectionId, setActiveConnectionId, addConnection, updateConnection, deleteConnection, testConnection,
+      profiles, activeProfileId, setActiveProfileId, addProfile, deleteProfile, duplicateProfile, saveCurrentToProfile,
+      tables, joins, rootTableId, reachableTables, addTableToCanvas, removeTableFromCanvas, updateTablePosition, togglePin, setAsRoot,
+      handleColumnClick, pendingJoin, toggleJoinActive, generatedSql, executeQuery, isExecuting, queryResult, history,
+      filters, addFilter, updateFilter, removeFilter, sorting, addSort, removeSort, limit, setLimit,
+      params, setParam, removeParam, clearParams, templates, saveTemplate, updateTemplate, applyTemplate, deleteTemplate,
+      savedQueries, saveQuery, applySavedQuery, deleteSavedQuery, presets, savePreset, applyPreset, deletePreset
+    }}>
       {children}
     </WorkbenchContext.Provider>
   );
@@ -735,8 +453,6 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
 
 export function useWorkbench() {
   const context = useContext(WorkbenchContext);
-  if (context === undefined) {
-    throw new Error('useWorkbench must be used within a WorkbenchProvider');
-  }
+  if (context === undefined) throw new Error('useWorkbench must be used within a WorkbenchProvider');
   return context;
 }

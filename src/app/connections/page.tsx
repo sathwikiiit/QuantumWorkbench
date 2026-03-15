@@ -1,29 +1,40 @@
+
 "use client";
 
 import { useState } from 'react';
 import { useWorkbench } from '@/context/WorkbenchContext';
-import { LeftSidebar } from '@/components/workbench/LeftSidebar';
-import { Toaster } from '@/components/ui/toaster';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { 
-  Database, Plus, Trash2, Terminal, Shield, 
-  Settings, Globe, ArrowLeft, Loader2, CheckCircle2, XCircle
-} from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Database, Plus, Trash2, Terminal, ArrowLeft, Loader2, CheckCircle2, XCircle, Edit3 } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ConnectionDialog } from '@/components/workbench/ConnectionDialog';
 import Link from 'next/link';
+import { Connection } from '@/lib/types';
 
 export default function ConnectionsPage() {
-  const { connections, addConnection, deleteConnection, testConnection } = useWorkbench();
-  const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+  const { connections, addConnection, updateConnection, deleteConnection, testConnection } = useWorkbench();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingConn, setEditingConn] = useState<Connection | undefined>(undefined);
   const [testingId, setTestingId] = useState<string | null>(null);
 
   const handleTest = async (id: string) => {
     setTestingId(id);
     await testConnection(id);
     setTestingId(null);
+  };
+
+  const handleOpenDialog = (conn?: Connection) => {
+    setEditingConn(conn);
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async (data: any) => {
+    if (editingConn) {
+      await updateConnection(editingConn.id, data);
+    } else {
+      await addConnection(data);
+    }
+    setIsDialogOpen(false);
   };
 
   return (
@@ -40,7 +51,7 @@ export default function ConnectionsPage() {
             <h1 className="font-headline font-black text-sm tracking-widest uppercase">Connections</h1>
           </div>
         </div>
-        <Button onClick={() => setIsNewDialogOpen(true)} className="gap-2 text-[10px] font-black uppercase tracking-widest px-6 h-10">
+        <Button onClick={() => handleOpenDialog()} className="gap-2 text-[10px] font-black uppercase tracking-widest px-6 h-10">
           <Plus className="w-4 h-4" />
           Add Connection
         </Button>
@@ -68,6 +79,9 @@ export default function ConnectionsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenDialog(conn)}>
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => deleteConnection(conn.id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -75,46 +89,28 @@ export default function ConnectionsPage() {
                   </CardHeader>
                   <CardContent className="p-5 pt-2 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Host</span>
-                        <span className="text-xs font-mono truncate">{conn.host}</span>
+                      <div className="flex flex-col gap-1 text-[11px]">
+                        <span className="text-[9px] font-black text-muted-foreground uppercase">Host</span>
+                        <span className="truncate font-mono">{conn.host}</span>
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Port</span>
-                        <span className="text-xs font-mono">{conn.port}</span>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Database</span>
-                        <span className="text-xs font-mono truncate">{conn.databaseName}</span>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Username</span>
-                        <span className="text-xs font-mono truncate">{conn.username}</span>
+                      <div className="flex flex-col gap-1 text-[11px]">
+                        <span className="text-[9px] font-black text-muted-foreground uppercase">Port</span>
+                        <span className="font-mono">{conn.port}</span>
                       </div>
                     </div>
-
                     <div className="pt-2 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {conn.status === 'connected' ? (
-                          <Badge className="bg-green-500/10 text-green-500 border-none text-[9px] gap-1.5">
-                            <CheckCircle2 className="w-3 h-3" /> CONNECTED
-                          </Badge>
+                          <Badge className="bg-green-500/10 text-green-500 border-none text-[9px] gap-1.5"><CheckCircle2 className="w-3 h-3" /> CONNECTED</Badge>
                         ) : conn.status === 'error' ? (
-                          <Badge className="bg-destructive/10 text-destructive border-none text-[9px] gap-1.5">
-                            <XCircle className="w-3 h-3" /> ERROR
-                          </Badge>
+                          <Badge className="bg-destructive/10 text-destructive border-none text-[9px] gap-1.5"><XCircle className="w-3 h-3" /> ERROR</Badge>
                         ) : (
-                          <Badge className="bg-muted text-muted-foreground border-none text-[9px] gap-1.5">
-                            OFFLINE
-                          </Badge>
+                          <Badge className="bg-muted text-muted-foreground border-none text-[9px]">OFFLINE</Badge>
                         )}
                       </div>
                       <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-8 text-[10px] font-black uppercase tracking-widest"
-                        onClick={() => handleTest(conn.id)}
-                        disabled={testingId === conn.id}
+                        variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase"
+                        onClick={() => handleTest(conn.id)} disabled={testingId === conn.id}
                       >
                         {testingId === conn.id ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Terminal className="w-3 h-3 mr-2" />}
                         Test
@@ -125,13 +121,11 @@ export default function ConnectionsPage() {
               ))}
 
               <button 
-                onClick={() => setIsNewDialogOpen(true)}
-                className="border-2 border-dashed border-border/40 rounded-xl flex flex-col items-center justify-center p-8 gap-4 hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary min-h-[220px]"
+                onClick={() => handleOpenDialog()}
+                className="border-2 border-dashed border-border/40 rounded-xl flex flex-col items-center justify-center p-8 gap-4 hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary min-h-[200px]"
               >
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                  <Plus className="w-6 h-6" />
-                </div>
-                <span className="text-xs font-black uppercase tracking-[0.2em]">New Connection</span>
+                <Plus className="w-6 h-6" />
+                <span className="text-xs font-black uppercase tracking-widest">New Connection</span>
               </button>
             </div>
           </div>
@@ -139,18 +133,9 @@ export default function ConnectionsPage() {
       </div>
 
       <ConnectionDialog 
-        open={isNewDialogOpen} 
-        onOpenChange={setIsNewDialogOpen} 
-        onSave={(data) => {
-          addConnection(data);
-          setIsNewDialogOpen(false);
-        }} 
-        onTest={async (data) => {
-          // Temporarily test during creation
-          return true;
-        }} 
+        open={isDialogOpen} onOpenChange={setIsDialogOpen} connection={editingConn}
+        onSave={handleSave} onTest={async (data) => true}
       />
-      <Toaster />
     </div>
   );
 }
