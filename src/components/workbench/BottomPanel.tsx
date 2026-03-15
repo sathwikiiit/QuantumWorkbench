@@ -104,7 +104,7 @@ export function BottomPanel({
                 <TableHeader className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <TableRow>
                     {result.columns.map(col => (
-                      <TableHead key={col} className="text-[10px] font-black uppercase tracking-wider">{col}</TableHead>
+                      <TableHead key={col.name} className="text-[10px] font-black uppercase tracking-wider">{col.name}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -112,8 +112,8 @@ export function BottomPanel({
                   {result.rows.map((row, i) => (
                     <TableRow key={i} className="hover:bg-white/5 border-white/5 h-8">
                       {result.columns.map(col => (
-                        <TableCell key={col} className="text-[11px] font-mono text-muted-foreground py-1">
-                          {row[col]?.toString() || ''}
+                        <TableCell key={col.name} className="text-[11px] font-mono text-muted-foreground py-1">
+                          {row[col.name]?.toString() || ''}
                         </TableCell>
                       ))}
                     </TableRow>
@@ -253,7 +253,7 @@ export function BottomPanel({
                 <div key={item.id} className="p-4 bg-card border rounded-xl group hover:border-primary/50 transition-all shadow-sm border-white/5">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-                      <Timer className="w-3 h-3" /> {isMounted ? item.timestamp.toLocaleTimeString() : '...'}
+                      <Timer className="w-3 h-3" /> {isMounted ? new Date(item.timestamp).toLocaleTimeString() : '...'}
                     </span>
                     <Badge className="bg-green-500/20 text-green-500 border-none text-[9px]">SUCCESS</Badge>
                   </div>

@@ -8,10 +8,17 @@ export type Column = {
   isNullable?: boolean;
 };
 
+export type ForeignKey = {
+  column: string;
+  referencesTable: string;
+  referencesColumn: string;
+};
+
 export type TableSchema = {
   id: string;
   name: string;
   columns: Column[];
+  foreignKeys?: ForeignKey[];
 };
 
 export type TableInstance = {
@@ -36,6 +43,7 @@ export type Join = {
   type: JoinType;
   active: boolean;
   required?: boolean;
+  source?: 'auto' | 'manual';
 };
 
 export type FilterOperator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
@@ -84,8 +92,65 @@ export type Profile = {
   limit: number;
 };
 
+export type WorkbenchState = {
+  id?: string;
+  connectionId: string;
+  tables: TableInstance[];
+  joins: Join[];
+  rootTableId: string | null;
+  filters: Filter[];
+  sorting: SortRule[];
+  limit: number;
+  selectedColumns: { tableId: string; column: string }[];
+  params?: Record<string, string>;
+};
+
+export type Template = {
+  id: string;
+  name: string;
+  connectionId: string;
+  tables: TableInstance[];
+  joins: Join[];
+  rootTableId: string | null;
+  selectedColumns: { tableId: string; column: string }[];
+  filters: Filter[];
+  sorting: SortRule[];
+  limit: number;
+  createdAt: string;
+  updatedAt?: string;
+  schemaSnapshotVersion?: string;
+};
+
+export type SavedQuery = {
+  id: string;
+  name: string;
+  connectionId: string;
+  templateId?: string;
+  sql?: string;
+  description?: string;
+  enabledJoins: string[]; // join ids
+  selectedColumns: { tableId: string; column: string }[];
+  filters: Filter[];
+  sorting: SortRule[];
+  limit: number;
+  params: Record<string, string>;
+  createdAt: string;
+};
+
+export type Preset = {
+  id: string;
+  name: string;
+  queryId?: string;
+  templateId?: string;
+  params: Record<string, string>;
+  tags?: string[];
+  notes?: string;
+  createdAt: string;
+};
+
 export type QueryResult = {
-  columns: string[];
+  sql: string;
+  columns: Array<{ name: string; type?: string }>;
   rows: any[];
   executionTimeMs: number;
   rowCount: number;
@@ -93,18 +158,16 @@ export type QueryResult = {
 
 export type ExecutionHistoryItem = {
   id: string;
-  timestamp: Date;
+  timestamp: string;
+  connectionId: string;
   sql: string;
+  params?: Record<string, string>;
+  joins?: Join[];
+  selectedColumns?: { tableId: string; column: string }[];
   metrics: {
     time: number;
     rows: number;
   };
   status: 'success' | 'error';
-};
-
-export type ParameterPreset = {
-  id: string;
-  name: string;
-  queryId?: string;
-  params: Record<string, any>;
+  errorMessage?: string;
 };

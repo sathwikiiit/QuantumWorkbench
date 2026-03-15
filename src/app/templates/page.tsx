@@ -6,8 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
-  Plus, Trash2, Globe, ArrowLeft, Copy, Layers, 
-  Settings2, Database, Layout, Calendar
+  Plus, Trash2, Globe, ArrowLeft, Layers, Database, Layout
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,13 +16,14 @@ import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 
 export default function TemplatesPage() {
-  const { profiles, connections, addProfile, deleteProfile, duplicateProfile } = useWorkbench();
+  const { templates, connections, saveTemplate, applyTemplate, deleteTemplate, setActiveConnectionId } = useWorkbench();
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name: '', connectionId: '' });
 
   const handleAdd = () => {
     if (newTemplate.name && newTemplate.connectionId) {
-      addProfile(newTemplate.name, newTemplate.connectionId);
+      setActiveConnectionId(newTemplate.connectionId);
+      saveTemplate(newTemplate.name);
       setIsNewDialogOpen(false);
       setNewTemplate({ name: '', connectionId: '' });
     }
@@ -58,20 +58,20 @@ export default function TemplatesPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {profiles.map((p) => {
-                const conn = connections.find(c => c.id === p.connectionId);
+              {templates.map((t) => {
+                const conn = connections.find(c => c.id === t.connectionId);
                 return (
-                  <Card key={p.id} className="border-border/40 bg-card/40 backdrop-blur-sm hover:border-primary/40 transition-all group overflow-hidden">
+                  <Card key={t.id} className="border-border/40 bg-card/40 backdrop-blur-sm hover:border-primary/40 transition-all group overflow-hidden">
                     <CardHeader className="p-5 flex flex-row items-center justify-between pb-2 bg-primary/5">
                       <div className="flex items-center gap-3">
                         <Layout className="w-4 h-4 text-primary" />
-                        <CardTitle className="text-sm font-bold">{p.name}</CardTitle>
+                        <CardTitle className="text-sm font-bold">{t.name}</CardTitle>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => duplicateProfile(p.id)}>
-                          <Copy className="w-3.5 h-3.5" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => applyTemplate(t)}>
+                          <Plus className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteProfile(p.id)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteTemplate(t.id)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -87,11 +87,11 @@ export default function TemplatesPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1">
                           <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Active Tables</span>
-                          <span className="text-lg font-headline font-bold">{p.tables.length}</span>
+                          <span className="text-lg font-headline font-bold">{t.tables.length}</span>
                         </div>
                         <div className="flex flex-col gap-1">
                           <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Joins</span>
-                          <span className="text-lg font-headline font-bold">{p.joins.length}</span>
+                          <span className="text-lg font-headline font-bold">{t.joins.length}</span>
                         </div>
                       </div>
 

@@ -340,8 +340,10 @@ export function useWorkbenchState() {
     await new Promise(r => setTimeout(r, 1200));
     
     const cols = tables.filter(t => reachableTables.has(t.id)).flatMap(t => t.pinnedColumns);
+    const columns = cols.length > 0 ? cols.map(name => ({ name })) : [{ name: 'id' }, { name: 'status' }];
     const mockResult: QueryResult = {
-      columns: cols.length > 0 ? cols : ['id', 'status'],
+      sql: generatedSql,
+      columns,
       rows: Array(5).fill(0).map((_, i) => ({
         id: i + 1,
         ...Object.fromEntries(cols.map(c => [c, `value_${i}`]))
@@ -353,8 +355,10 @@ export function useWorkbenchState() {
     setQueryResult(mockResult);
     setHistory(prev => [{
       id: `h-${Date.now()}`,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
+      connectionId: activeConnectionId,
       sql: generatedSql,
+      params: {},
       metrics: { time: mockResult.executionTimeMs, rows: mockResult.rowCount },
       status: 'success'
     }, ...prev]);

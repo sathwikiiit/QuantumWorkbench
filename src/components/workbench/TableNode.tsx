@@ -11,8 +11,8 @@ import {
   ListFilter, ArrowUpDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { REALISTIC_SCHEMA } from '@/lib/mock-schema';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useWorkbench } from '@/context/WorkbenchContext';
 
 interface TableNodeProps {
   table: TableInstance;
@@ -43,17 +43,19 @@ export function TableNode({
   isPendingSource,
   pendingColumn 
 }: TableNodeProps) {
+  const { schema } = useWorkbench();
+
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [search, setSearch] = useState('');
 
-  const schema = useMemo(() => 
-    REALISTIC_SCHEMA.find(s => s.id === table.schemaId) || REALISTIC_SCHEMA[0], 
-  [table.schemaId]);
+  const schemaItem = useMemo(() => 
+    schema.find(s => s.id === table.schemaId) ?? { id: '', name: table.name, columns: [] }, 
+  [schema, table.schemaId, table.name]);
 
   const filteredColumns = useMemo(() => 
-    schema.columns.filter(c => c.name.toLowerCase().includes(search.toLowerCase())),
-  [schema.columns, search]);
+    schemaItem.columns.filter(c => c.name.toLowerCase().includes(search.toLowerCase())),
+  [schemaItem.columns, search]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);

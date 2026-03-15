@@ -10,7 +10,7 @@ import {
 import { 
   Accordion, AccordionContent, AccordionItem, AccordionTrigger 
 } from '@/components/ui/accordion';
-import { REALISTIC_SCHEMA } from '@/lib/mock-schema';
+import { useWorkbench } from '@/context/WorkbenchContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -22,6 +22,7 @@ interface LeftSidebarProps {
 
 export function LeftSidebar({ onAddTable }: LeftSidebarProps) {
   const pathname = usePathname();
+  const { schema } = useWorkbench();
 
   const isWorkbench = pathname === '/';
 
@@ -56,6 +57,24 @@ export function LeftSidebar({ onAddTable }: LeftSidebarProps) {
               )}>
                 <Layers className="w-4 h-4" />
                 Templates
+              </div>
+            </Link>
+            <Link href="/saved-queries">
+              <div className={cn(
+                "flex items-center gap-3 p-2 rounded-lg text-xs font-bold transition-all",
+                pathname === '/saved-queries' ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-white/5"
+              )}>
+                <Bookmark className="w-4 h-4" />
+                Saved Queries
+              </div>
+            </Link>
+            <Link href="/presets">
+              <div className={cn(
+                "flex items-center gap-3 p-2 rounded-lg text-xs font-bold transition-all",
+                pathname === '/presets' ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-white/5"
+              )}>
+                <Key className="w-4 h-4" />
+                Presets
               </div>
             </Link>
           </nav>
@@ -95,7 +114,7 @@ export function LeftSidebar({ onAddTable }: LeftSidebarProps) {
                   </AccordionTrigger>
                   <AccordionContent className="pb-2 pt-1">
                     <div className="space-y-1">
-                      {REALISTIC_SCHEMA.map(table => (
+                      {schema.map(table => (
                         <TooltipProvider key={table.id}>
                           <Tooltip>
                             <TooltipTrigger asChild>
