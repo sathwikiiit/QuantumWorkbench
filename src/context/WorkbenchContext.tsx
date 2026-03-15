@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
@@ -114,8 +115,14 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
         setTemplates(templ);
         setSavedQueries(saved);
         setPresets(pre);
-        if (conn.length > 0 && !activeConnectionId) setActiveConnectionId(conn[0].id);
-        if (prof.length > 0 && !activeProfileId) setActiveProfileId(prof[0].id);
+        
+        // Only set defaults if nothing is active
+        if (conn.length > 0 && !activeConnectionId) {
+          setActiveConnectionId(conn[0].id);
+        }
+        if (prof.length > 0 && !activeProfileId) {
+          setActiveProfileId(prof[0].id);
+        }
       } catch (error) {
         console.error('Failed initial load', error);
       }
@@ -128,10 +135,12 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
       setSchema([]);
       return;
     }
+    
     if (schemaCache[activeConnectionId]) {
       setSchema(schemaCache[activeConnectionId]);
       return;
     }
+
     let cancelled = false;
     (async () => {
       try {
@@ -321,6 +330,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyTemplate = useCallback((template: Template) => {
+    // Atomic update of connection and state
     setActiveConnectionId(template.connectionId);
     setTables(template.tables);
     setJoins(template.joins);
@@ -328,7 +338,11 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setFilters(template.filters);
     setSorting(template.sorting);
     setLimit(template.limit);
-    toast({ title: "Template Applied" });
+    
+    // Deactivate any active profile to prevent overwrites
+    setActiveProfileId('');
+    
+    toast({ title: "Template Applied", description: `Layout restored for ${template.name}` });
   }, []);
 
   const deleteTemplate = useCallback(async (id: string) => {
@@ -479,6 +493,21 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     await api.deletePreset(id);
     setPresets(prev => prev.filter(p => p.id !== id));
   }, []);
+
+  // Sync active profile with canvas - Only when profile ID explicitly changes
+  useEffect(() => {
+    if (!activeProfileId) return;
+    const p = profiles.find(prof => prof.id === activeProfileId);
+    if (p) {
+      setTables(p.tables || []);
+      setJoins(p.joins || []);
+      setRootTableId(p.rootTableId || null);
+      setFilters(p.filters || []);
+      setSorting(p.sorting || []);
+      setLimit(p.limit || 50);
+      setActiveConnectionId(p.connectionId);
+    }
+  }, [activeProfileId]); // Only trigger on ID change
 
   return (
     <WorkbenchContext.Provider value={{
