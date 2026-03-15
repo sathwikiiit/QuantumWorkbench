@@ -17,6 +17,7 @@ export type ForeignKey = {
 export type TableSchema = {
   id: string;
   name: string;
+  schemaName: string;
   columns: Column[];
   foreignKeys?: ForeignKey[];
 };
@@ -25,6 +26,7 @@ export type TableInstance = {
   id: string;
   schemaId: string;
   name: string;
+  schemaName?: string;
   alias?: string;
   position: { x: number; y: number };
   pinnedColumns: string[];

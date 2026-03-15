@@ -5,6 +5,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'customers',
     name: 'customers',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'email', type: 'varchar', isNullable: false },
@@ -17,6 +18,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'addresses',
     name: 'addresses',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'customer_id', type: 'uuid', isForeignKey: true, isNullable: false, references: { table: 'customers', column: 'id' } },
@@ -31,6 +33,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'orders',
     name: 'orders',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'customer_id', type: 'uuid', isForeignKey: true, isNullable: false, references: { table: 'customers', column: 'id' } },
@@ -45,6 +48,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'order_items',
     name: 'order_items',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'order_id', type: 'uuid', isForeignKey: true, isNullable: false, references: { table: 'orders', column: 'id' } },
@@ -60,6 +64,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'products',
     name: 'products',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'name', type: 'varchar', isNullable: false },
@@ -72,6 +77,7 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
   {
     id: 'payments',
     name: 'payments',
+    schemaName: 'public',
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, isNullable: false },
       { name: 'order_id', type: 'uuid', isForeignKey: true, isNullable: false, references: { table: 'orders', column: 'id' } },
@@ -81,6 +87,25 @@ export const REALISTIC_SCHEMA: TableSchema[] = [
     ],
     foreignKeys: [
       { column: 'order_id', referencesTable: 'orders', referencesColumn: 'id' }
+    ]
+  },
+  {
+    id: 'sales_stats',
+    name: 'sales_stats',
+    schemaName: 'analytics',
+    columns: [
+      { name: 'region', type: 'varchar', isNullable: false },
+      { name: 'total_sales', type: 'decimal', isNullable: false },
+      { name: 'period', type: 'varchar', isNullable: false }
+    ]
+  },
+  {
+    id: 'user_growth',
+    name: 'user_growth',
+    schemaName: 'analytics',
+    columns: [
+      { name: 'month', type: 'varchar', isNullable: false },
+      { name: 'new_users', type: 'integer', isNullable: false }
     ]
   }
 ];
