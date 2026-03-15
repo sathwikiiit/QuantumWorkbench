@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Connection, DBType } from '@/lib/types';
-import { Database, Shield, Globe, Terminal, Loader2 } from 'lucide-react';
+import { Database, Shield, Globe, Terminal, Loader2, Lock } from 'lucide-react';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -76,6 +76,10 @@ export function ConnectionDialog({ open, onOpenChange, connection, onSave, onTes
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="user" className="text-right text-xs">Username</Label>
             <Input id="user" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="col-span-3 h-8" />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="pass" className="text-right text-xs">Password</Label>
+            <Input id="pass" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="col-span-3 h-8" />
           </div>
         </div>
         <DialogFooter className="gap-2">
