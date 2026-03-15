@@ -50,7 +50,7 @@ export function TableNode({
   const [search, setSearch] = useState('');
 
   const schemaItem = useMemo(() => 
-    schema.find(s => s.id === table.schemaId) ?? { id: '', name: table.name, columns: [] }, 
+    schema.find(s => s.id === table.schemaId) ?? { id: '', name: table.name, columns: [], schemaName: 'public' }, 
   [schema, table.schemaId, table.name]);
 
   const filteredColumns = useMemo(() => 
@@ -84,8 +84,9 @@ export function TableNode({
   }, [isDragging, dragOffset, onMove, table.id]);
 
   const getIcon = (type: string) => {
-    if (type.includes('int') || type.includes('decimal')) return <Hash className="w-3 h-3 text-accent" />;
-    if (type.includes('timestamp') || type.includes('date')) return <Calendar className="w-3 h-3 text-accent" />;
+    const t = type.toLowerCase();
+    if (t.includes('int') || t.includes('decimal') || t.includes('number') || t.includes('float')) return <Hash className="w-3 h-3 text-accent" />;
+    if (t.includes('timestamp') || t.includes('date') || t.includes('time')) return <Calendar className="w-3 h-3 text-accent" />;
     return <Type className="w-3 h-3 text-accent" />;
   };
 
@@ -111,10 +112,13 @@ export function TableNode({
           <div className="flex items-center gap-2">
             <GripHorizontal className="w-4 h-4 text-muted-foreground" />
             <div className="flex flex-col">
-              <CardTitle className="text-xs font-bold uppercase tracking-widest">{table.name}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-[11px] font-bold uppercase tracking-widest">{table.name}</CardTitle>
+                <Badge variant="outline" className="text-[8px] px-1 h-3 opacity-60 font-mono">{schemaItem.schemaName || 'public'}</Badge>
+              </div>
               {!isReachable && !isRoot && (
-                <span className="text-[9px] text-destructive font-bold flex items-center gap-1">
-                  <AlertCircle className="w-2 h-2" /> UNREACHABLE
+                <span className="text-[9px] text-destructive font-black tracking-widest flex items-center gap-1 mt-0.5">
+                  <AlertCircle className="w-2.5 h-2.5" /> UNREACHABLE
                 </span>
               )}
             </div>
@@ -122,14 +126,14 @@ export function TableNode({
           <div className="flex items-center gap-1">
              <button 
               onClick={() => onSetRoot(table.id)}
-              className={cn("p-1 rounded hover:bg-white/10", isRoot ? "text-primary" : "text-muted-foreground")}
+              className={cn("p-1.5 rounded hover:bg-white/10 transition-colors", isRoot ? "text-primary" : "text-muted-foreground")}
               title="Set as Root Table"
             >
               <Anchor className="w-3.5 h-3.5" />
             </button>
             <button 
               onClick={() => onRemove(table.id)}
-              className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+              className="p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
               title="Remove Table"
             >
               <Trash2 className="w-3.5 h-3.5" />

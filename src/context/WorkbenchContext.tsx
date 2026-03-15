@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
@@ -14,7 +13,7 @@ interface WorkbenchContextType {
   connections: Connection[];
   activeConnectionId: string;
   setActiveConnectionId: (id: string) => void;
-  addConnection: (conn: Omit<Connection, 'id' | 'status'>) => Promise<string>;
+  addConnection: (conn: Omit<Connection, 'id' | 'password' | 'status'> & { password?: string }) => Promise<string>;
   updateConnection: (id: string, updates: Partial<Connection>) => Promise<void>;
   deleteConnection: (id: string) => Promise<void>;
   testConnection: (id: string) => Promise<boolean>;
@@ -39,11 +38,12 @@ interface WorkbenchContextType {
   toggleJoinActive: (id: string) => void;
   generatedSql: string;
   executeQuery: () => Promise<void>;
+  validateQuery: () => Promise<void>;
   isExecuting: boolean;
   queryResult: QueryResult | null;
   history: ExecutionHistoryItem[];
   filters: Filter[];
-  addFilter: (tableId: string, column: string) => void;
+  addFilter: (tableId: string, colName: string) => void;
   updateFilter: (id: string, updates: Partial<Filter>) => void;
   removeFilter: (id: string) => void;
   sorting: SortRule[];
@@ -55,18 +55,15 @@ interface WorkbenchContextType {
   setParam: (key: string, value: string) => void;
   removeParam: (key: string) => void;
   clearParams: () => void;
-
   templates: Template[];
   saveTemplate: (name: string, connectionId?: string) => Promise<void>;
   updateTemplate: (id: string, updates: Partial<Template>) => Promise<void>;
   applyTemplate: (template: Template) => void;
   deleteTemplate: (id: string) => Promise<void>;
-
   savedQueries: SavedQuery[];
   saveQuery: (name: string, templateId: string) => Promise<void>;
   applySavedQuery: (query: SavedQuery) => Promise<void>;
   deleteSavedQuery: (id: string) => Promise<void>;
-
   presets: Preset[];
   savePreset: (name: string, params: Record<string, string>) => Promise<void>;
   applyPreset: (preset: Preset) => void;
@@ -79,24 +76,19 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const [schema, setSchema] = useState<TableSchema[]>([]);
   const [schemaCache, setSchemaCache] = useState<Record<string, TableSchema[]>>({});
   const [params, setParams] = useState<Record<string, string>>({});
-  
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string>('');
-  
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>('');
-
   const [templates, setTemplates] = useState<Template[]>([]);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
-
   const [tables, setTables] = useState<TableInstance[]>([]);
   const [joins, setJoins] = useState<Join[]>([]);
   const [rootTableId, setRootTableId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filter[]>([]);
   const [sorting, setSorting] = useState<SortRule[]>([]);
   const [limit, setLimit] = useState<number>(50);
-
   const [generatedSql, setGeneratedSql] = useState<string>('');
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [history, setHistory] = useState<ExecutionHistoryItem[]>([]);
@@ -176,7 +168,84 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     return reachable;
   }, [rootTableId, joins]);
 
-  const addConnection = useCallback(async (conn: Omit<Connection, 'id' | 'status'>) => {
+  const addTableToCanvas = useCallback((schemaId: string) => {
+    const tableSchema = schema.find(s => s.id === schemaId);
+    if (!tableSchema) return;
+
+    const newId = `${schemaId}_${Date.now()}`;
+    const newTable: TableInstance = {
+      id: newId,
+      schemaId: tableSchema.id,
+      name: tableSchema.name,
+      schemaName: tableSchema.schemaName,
+      position: { x: 100 + tables.length * 50, y: 100 + tables.length * 50 },
+      pinnedColumns: tableSchema.columns.slice(0, 5).map(c => c.name),
+      isRoot: tables.length === 0
+    };
+
+    setTables(prev => [...prev, newTable]);
+    if (tables.length === 0) setRootTableId(newId);
+  }, [schema, tables.length]);
+
+  const removeTableFromCanvas = useCallback((id: string) => {
+    setTables(prev => prev.filter(t => t.id !== id));
+    setJoins(prev => prev.filter(j => j.sourceTableId !== id && j.targetTableId !== id));
+    setFilters(prev => prev.filter(f => f.tableId !== id));
+    setSorting(prev => prev.filter(s => s.tableId !== id));
+    if (rootTableId === id) setRootTableId(null);
+  }, [rootTableId]);
+
+  const updateTablePosition = useCallback((id: string, x: number, y: number) => {
+    setTables(prev => prev.map(t => t.id === id ? { ...t, position: { x, y } } : t));
+  }, []);
+
+  const togglePin = useCallback((tableId: string, colName: string) => {
+    setTables(prev => prev.map(t => {
+      if (t.id !== tableId) return t;
+      const isPinned = t.pinnedColumns.includes(colName);
+      return {
+        ...t,
+        pinnedColumns: isPinned 
+          ? t.pinnedColumns.filter(c => c !== colName) 
+          : [...t.pinnedColumns, colName]
+      };
+    }));
+  }, []);
+
+  const setAsRoot = useCallback((id: string) => {
+    setRootTableId(id);
+    toast({ title: "Root Table Set", description: `Query generation now starts from ${tables.find(t => t.id === id)?.name}` });
+  }, [tables]);
+
+  const handleColumnClick = useCallback((tableId: string, column: string) => {
+    if (!pendingJoin) {
+      setPendingJoin({ tableId, column });
+      toast({ title: "Select Target", description: "Select a column in another table to create a join." });
+    } else {
+      if (pendingJoin.tableId === tableId) {
+        setPendingJoin(null);
+        return;
+      }
+      const newJoin: Join = {
+        id: `j-${Date.now()}`,
+        sourceTableId: pendingJoin.tableId,
+        sourceColumn: pendingJoin.column,
+        targetTableId: tableId,
+        targetColumn: column,
+        type: 'INNER',
+        active: true
+      };
+      setJoins(prev => [...prev, newJoin]);
+      setPendingJoin(null);
+      toast({ title: "Join Created", description: `Linked ${pendingJoin.column} to ${column}` });
+    }
+  }, [pendingJoin]);
+
+  const toggleJoinActive = useCallback((id: string) => {
+    setJoins(prev => prev.map(j => j.id === id ? { ...j, active: !j.active } : j));
+  }, []);
+
+  const addConnection = useCallback(async (conn: Omit<Connection, 'id' | 'password' | 'status'> & { password?: string }) => {
     const newConn = await api.createConnection(conn);
     setConnections(prev => [...prev, newConn]);
     return newConn.id;
@@ -190,7 +259,8 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const deleteConnection = useCallback(async (id: string) => {
     await api.deleteConnection(id);
     setConnections(prev => prev.filter(c => c.id !== id));
-  }, []);
+    if (activeConnectionId === id) setActiveConnectionId('');
+  }, [activeConnectionId]);
 
   const testConnection = useCallback(async (id: string) => {
     const result = await api.testConnection(id);
@@ -247,6 +317,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const updateTemplate = useCallback(async (id: string, updates: Partial<Template>) => {
     const updated = await api.updateTemplate(id, updates);
     setTemplates(prev => prev.map(t => t.id === id ? updated : t));
+    toast({ title: "Template Updated" });
   }, []);
 
   const applyTemplate = useCallback((template: Template) => {
@@ -291,84 +362,64 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setSavedQueries(prev => prev.filter(q => q.id !== id));
   }, []);
 
-  const savePreset = useCallback(async (name: string, params: Record<string, string>) => {
-    const newPreset = await api.createPreset({ name, params, createdAt: new Date().toISOString() });
-    setPresets(prev => [...prev, newPreset]);
-  }, []);
+  const executeQuery = useCallback(async () => {
+    if (!rootTableId || !activeConnectionId) return;
+    setIsExecuting(true);
+    try {
+      const payload = {
+        connectionId: activeConnectionId,
+        rootTableId,
+        limit,
+        params,
+        joins: joins.map(j => ({
+          id: j.id,
+          sourceTableId: j.sourceTableId,
+          sourceColumn: j.sourceColumn,
+          targetTableId: j.targetTableId,
+          targetColumn: j.targetColumn,
+          type: j.type,
+          active: j.active
+        })),
+        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
+        filters: filters.map(f => ({ tableId: f.tableId, column: f.column, operator: f.operator, value: f.value })),
+        sorting: sorting.map(s => ({ tableId: s.tableId, column: s.column, order: s.order }))
+      };
+      const result = await api.executeQuery(payload);
+      setQueryResult(result);
+      const hist = await api.appendHistory({
+        timestamp: new Date().toISOString(), connectionId: activeConnectionId, sql: result.sql,
+        metrics: { time: result.executionTimeMs, rows: result.rowCount }, status: 'success', params
+      });
+      setHistory(prev => [hist, ...prev]);
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Query Failed' });
+    } finally { setIsExecuting(false); }
+  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
 
-  const applyPreset = useCallback((preset: Preset) => {
-    setParams(preset.params);
-  }, []);
-
-  const deletePreset = useCallback(async (id: string) => {
-    await api.deletePreset(id);
-    setPresets(prev => prev.filter(p => p.id !== id));
-  }, []);
-
-  useEffect(() => {
-    const p = profiles.find(prof => prof.id === activeProfileId);
-    if (p) {
-      setTables(p.tables || []);
-      setJoins(p.joins || []);
-      setRootTableId(p.rootTableId || null);
-      setFilters(p.filters || []);
-      setSorting(p.sorting || []);
-      setLimit(p.limit || 50);
-      setActiveConnectionId(p.connectionId);
-    }
-  }, [activeProfileId, profiles]);
-
-  const addTableToCanvas = useCallback((schemaId: string) => {
-    const tableSchema = schema.find(s => s.id === schemaId);
-    if (!tableSchema) return;
-    const newInstanceId = `${schemaId}_${Date.now()}`;
-    const newInstance: TableInstance = {
-      id: newInstanceId, schemaId: tableSchema.id, name: tableSchema.name,
-      position: { x: 150 + (tables.length * 50), y: 150 + (tables.length * 50) },
-      pinnedColumns: tableSchema.columns.slice(0, 4).map(c => c.name),
-      isRoot: tables.length === 0
-    };
-    if (tables.length === 0) setRootTableId(newInstanceId);
-    setTables(prev => [...prev, newInstance]);
-  }, [tables, schema]);
-
-  const removeTableFromCanvas = useCallback((id: string) => {
-    setTables(prev => prev.filter(t => t.id !== id));
-    setJoins(prev => prev.filter(j => j.sourceTableId !== id && j.targetTableId !== id));
-    if (rootTableId === id) setRootTableId(null);
-  }, [rootTableId]);
-
-  const updateTablePosition = useCallback((id: string, x: number, y: number) => {
-    setTables(prev => prev.map(t => t.id === id ? { ...t, position: { x, y } } : t));
-  }, []);
-
-  const togglePin = useCallback((tableId: string, colName: string) => {
-    setTables(prev => prev.map(t => {
-      if (t.id !== tableId) return t;
-      const isPinned = t.pinnedColumns.includes(colName);
-      return { ...t, pinnedColumns: isPinned ? t.pinnedColumns.filter(c => c !== colName) : [...t.pinnedColumns, colName] };
-    }));
-  }, []);
-
-  const setAsRoot = useCallback((id: string) => { setRootTableId(id); }, []);
-
-  const handleColumnClick = useCallback((tableId: string, column: string) => {
-    if (!pendingJoin) {
-      setPendingJoin({ tableId, column });
-    } else {
-      if (pendingJoin.tableId !== tableId) {
-        setJoins(prev => [...prev, {
-          id: `j-${Date.now()}`, sourceTableId: pendingJoin.tableId, sourceColumn: pendingJoin.column,
-          targetTableId: tableId, targetColumn: column, type: 'INNER', active: true, source: 'manual'
-        }]);
+  const validateQuery = useCallback(async () => {
+    if (!rootTableId || !activeConnectionId) return;
+    try {
+      const payload = {
+        connectionId: activeConnectionId,
+        rootTableId,
+        limit,
+        params,
+        joins: joins.map(j => ({ id: j.id, sourceTableId: j.sourceTableId, sourceColumn: j.sourceColumn, targetTableId: j.targetTableId, targetColumn: j.targetColumn, type: j.type, active: j.active })),
+        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
+        filters: filters.map(f => ({ tableId: f.tableId, column: f.column, operator: f.operator, value: f.value })),
+        sorting: sorting.map(s => ({ tableId: s.tableId, column: s.column, order: s.order }))
+      };
+      const result = await api.validateQuery(payload);
+      if (result.valid) {
+        toast({ title: "Validation Success", description: "Graph is fully connected and valid." });
+      } else {
+        toast({ variant: 'destructive', title: "Validation Failed", description: result.errors.join(", ") });
       }
-      setPendingJoin(null);
+    } catch (error) {
+      toast({ variant: 'destructive', title: "Validation Error" });
     }
-  }, [pendingJoin]);
-
-  const toggleJoinActive = useCallback((id: string) => {
-    setJoins(prev => prev.map(j => j.id === id ? { ...j, active: !j.active } : j));
-  }, []);
+  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
 
   useEffect(() => {
     if (!rootTableId) { setGeneratedSql('-- Anchor a root table to begin SQL generation'); return; }
@@ -403,30 +454,6 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     setGeneratedSql(sql);
   }, [tables, joins, rootTableId, reachableTables, filters, sorting, limit]);
 
-  const executeQuery = useCallback(async () => {
-    if (!rootTableId) return;
-    setIsExecuting(true);
-    try {
-      const payload = {
-        connectionId: activeConnectionId, rootTableId, limit, params,
-        joins: joins.map(j => ({ ...j })),
-        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-        filters: filters.map(f => ({ ...f })),
-        sorting: sorting.map(s => ({ ...s }))
-      };
-      const result = await api.executeQuery(payload);
-      setQueryResult(result);
-      const hist = await api.appendHistory({
-        timestamp: new Date().toISOString(), connectionId: activeConnectionId, sql: result.sql,
-        metrics: { time: result.executionTimeMs, rows: result.rowCount }, status: 'success', params
-      });
-      setHistory(prev => [hist, ...prev]);
-    } catch (error) {
-      console.error(error);
-      toast({ variant: 'destructive', title: 'Query Failed' });
-    } finally { setIsExecuting(false); }
-  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
-
   const addFilter = useCallback((tableId: string, column: string) => { setFilters(prev => [...prev, { id: `f-${Date.now()}`, tableId, column, operator: '=', value: '' }]); }, []);
   const updateFilter = useCallback((id: string, updates: Partial<Filter>) => { setFilters(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f)); }, []);
   const removeFilter = useCallback((id: string) => { setFilters(prev => prev.filter(f => f.id !== id)); }, []);
@@ -436,12 +463,29 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const removeParam = useCallback((key: string) => { setParams(prev => { const n = { ...prev }; delete n[key]; return n; }); }, []);
   const clearParams = useCallback(() => setParams({}), []);
 
+  const savePreset = useCallback(async (name: string, params: Record<string, string>) => {
+    const newPreset = await api.createPreset({
+      name, params, createdAt: new Date().toISOString()
+    });
+    setPresets(prev => [...prev, newPreset]);
+  }, []);
+
+  const applyPreset = useCallback((preset: Preset) => {
+    setParams(preset.params);
+    toast({ title: "Preset Applied" });
+  }, []);
+
+  const deletePreset = useCallback(async (id: string) => {
+    await api.deletePreset(id);
+    setPresets(prev => prev.filter(p => p.id !== id));
+  }, []);
+
   return (
     <WorkbenchContext.Provider value={{
       schema, connections, activeConnectionId, setActiveConnectionId, addConnection, updateConnection, deleteConnection, testConnection,
       profiles, activeProfileId, setActiveProfileId, addProfile, deleteProfile, duplicateProfile, saveCurrentToProfile,
       tables, joins, rootTableId, reachableTables, addTableToCanvas, removeTableFromCanvas, updateTablePosition, togglePin, setAsRoot,
-      handleColumnClick, pendingJoin, toggleJoinActive, generatedSql, executeQuery, isExecuting, queryResult, history,
+      handleColumnClick, pendingJoin, toggleJoinActive, generatedSql, executeQuery, validateQuery, isExecuting, queryResult, history,
       filters, addFilter, updateFilter, removeFilter, sorting, addSort, removeSort, limit, setLimit,
       params, setParam, removeParam, clearParams, templates, saveTemplate, updateTemplate, applyTemplate, deleteTemplate,
       savedQueries, saveQuery, applySavedQuery, deleteSavedQuery, presets, savePreset, applyPreset, deletePreset

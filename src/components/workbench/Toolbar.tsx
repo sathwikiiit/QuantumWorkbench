@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -6,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { 
   Database, Play, Save, Share2, Settings, 
   ChevronDown, Globe, Terminal, Cpu, Plus, 
-  Settings2, Activity, Layers
+  Settings2, Activity, Layers, CheckCircle2
 } from 'lucide-react';
 import { 
   DropdownMenu, 
@@ -20,6 +19,7 @@ import { Connection, Profile, Template } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useWorkbench } from '@/context/WorkbenchContext';
 
 interface ToolbarProps {
   connections: Connection[];
@@ -46,6 +46,7 @@ export function Toolbar({
   profiles, activeProfileId, onProfileChange, onAddProfile, onDeleteProfile, onDuplicateProfile, onSaveProfile,
   onExecute, isExecuting, templates, onApplyTemplate
 }: ToolbarProps) {
+  const { validateQuery } = useWorkbench();
   const activeConn = connections.find(c => c.id === activeConnectionId);
   const activeProfile = profiles.find(p => p.id === activeProfileId);
 
@@ -147,13 +148,13 @@ export function Toolbar({
 
       <div className="flex items-center gap-3">
         <div className="flex items-center bg-secondary/30 rounded-md p-1 border">
-          <Button variant="ghost" size="sm" className="h-8 text-xs gap-2 font-bold" onClick={onSaveProfile}>
+          <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest gap-2" onClick={onSaveProfile}>
             <Save className="w-3.5 h-3.5" />
             Save
           </Button>
-          <Button variant="ghost" size="sm" className="h-8 text-xs gap-2 font-bold">
-            <Share2 className="w-3.5 h-3.5" />
-            Export
+          <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest gap-2" onClick={validateQuery}>
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Validate
           </Button>
         </div>
 

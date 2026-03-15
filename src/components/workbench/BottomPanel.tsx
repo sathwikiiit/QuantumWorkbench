@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -79,7 +78,7 @@ export function BottomPanel({
               <span className="text-[10px] font-bold text-muted-foreground uppercase">Limit:</span>
               <Input 
                 type="number" 
-                value={limit ?? 50} 
+                value={limit || 50} 
                 onChange={(e) => onLimitChange(parseInt(e.target.value) || 0)}
                 className="w-20 h-7 text-xs bg-background/50"
               />
@@ -159,7 +158,7 @@ export function BottomPanel({
                   {filter.operator !== 'IS NULL' && filter.operator !== 'IS NOT NULL' && (
                     <Input 
                       placeholder={filter.operator === 'IN' ? "val1, val2, val3..." : "Value..."}
-                      value={filter.value ?? ''}
+                      value={filter.value || ''}
                       onChange={(e) => onUpdateFilter(filter.id, { value: e.target.value })}
                       className="flex-1 h-9 bg-background/50 text-xs font-mono"
                     />

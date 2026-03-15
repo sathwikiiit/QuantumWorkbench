@@ -1,7 +1,6 @@
 import { Connection, ExecutionHistoryItem, Profile, QueryResult, TableSchema, WorkbenchState, Template, SavedQuery, Preset } from './types';
 
 // Use environment variable for the API base URL. 
-// Deactivates relative mock routes if NEXT_PUBLIC_API_URL is missing or set.
 const BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -97,14 +96,12 @@ export type StructuredQuery = {
     targetColumn: string;
     type: 'INNER' | 'LEFT';
     active: boolean;
-    required?: boolean;
-    source?: 'auto' | 'manual';
   }>;
   selectedColumns: Array<{ tableId: string; column: string }>;
   filters: Array<{ tableId: string; column: string; operator: string; value: string }>;
-  sorting: Array<{ tableId: string; column: string; order: 'ASC' | 'DESC' }>;
   limit: number;
   params?: Record<string, string>;
+  sorting?: Array<{ tableId: string; column: string; order: 'ASC' | 'DESC' }>;
 };
 
 export type QueryValidationResult = {
