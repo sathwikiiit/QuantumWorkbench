@@ -57,7 +57,7 @@ interface WorkbenchContextType {
   clearParams: () => void;
 
   templates: Template[];
-  saveTemplate: (name: string) => Promise<void>;
+  saveTemplate: (name: string, connectionId?: string) => Promise<void>;
   applyTemplate: (template: Template) => void;
   deleteTemplate: (id: string) => Promise<void>;
 
@@ -281,10 +281,15 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "State Saved", description: "Workbench layout and query parameters persisted to profile." });
   }, [activeProfileId, tables, joins, rootTableId, filters, sorting, limit]);
 
-  const saveTemplate = useCallback(async (name: string) => {
+  const saveTemplate = useCallback(async (name: string, connectionId?: string) => {
+    const cid = connectionId || activeConnectionId;
+    if (!cid) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No connection selected.' });
+      return;
+    }
     const newTemplate = await api.createTemplate({
       name,
-      connectionId: activeConnectionId,
+      connectionId: cid,
       tables,
       joins,
       rootTableId,

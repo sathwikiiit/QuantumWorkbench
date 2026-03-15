@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -20,10 +21,10 @@ export default function TemplatesPage() {
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name: '', connectionId: '' });
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (newTemplate.name && newTemplate.connectionId) {
-      setActiveConnectionId(newTemplate.connectionId);
-      saveTemplate(newTemplate.name);
+      // Explicitly pass connectionId to avoid context state lag
+      await saveTemplate(newTemplate.name, newTemplate.connectionId);
       setIsNewDialogOpen(false);
       setNewTemplate({ name: '', connectionId: '' });
     }
@@ -97,7 +98,7 @@ export default function TemplatesPage() {
 
                       <div className="pt-2">
                         <Link href="/">
-                          <Button className="w-full h-9 text-[10px] font-black uppercase tracking-widest" variant="secondary">
+                          <Button className="w-full h-9 text-[10px] font-black uppercase tracking-widest" variant="secondary" onClick={() => applyTemplate(t)}>
                             Open in Workbench
                           </Button>
                         </Link>

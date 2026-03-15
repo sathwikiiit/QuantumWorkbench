@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -5,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { 
   Database, Play, Save, Share2, Settings, 
   ChevronDown, Globe, Terminal, Cpu, Plus, 
-  Settings2, Activity
+  Settings2, Activity, Layers
 } from 'lucide-react';
 import { 
   DropdownMenu, 
@@ -15,9 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { ConnectionDialog } from './ConnectionDialog';
-import { ProfileDialog } from './ProfileDialog';
-import { Connection, Profile } from '@/lib/types';
+import { Connection, Profile, Template } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -38,16 +37,15 @@ interface ToolbarProps {
   onSaveProfile: () => void;
   onExecute: () => void;
   isExecuting: boolean;
+  templates: Template[];
+  onApplyTemplate: (template: Template) => void;
 }
 
 export function Toolbar({ 
   connections, activeConnectionId, onConnectionChange, onAddConnection, onTestConnection, onDeleteConnection,
   profiles, activeProfileId, onProfileChange, onAddProfile, onDeleteProfile, onDuplicateProfile, onSaveProfile,
-  onExecute, isExecuting 
+  onExecute, isExecuting, templates, onApplyTemplate
 }: ToolbarProps) {
-  const [isConnOpen, setIsConnOpen] = useState(false);
-  const [isProfOpen, setIsProfOpen] = useState(false);
-  
   const activeConn = connections.find(c => c.id === activeConnectionId);
   const activeProfile = profiles.find(p => p.id === activeProfileId);
 
@@ -108,14 +106,14 @@ export function Toolbar({
               <Button variant="ghost" size="sm" className="gap-2 font-bold text-xs h-10 hover:bg-accent/50">
                 <Globe className="w-4 h-4 text-primary" />
                 <div className="flex flex-col items-start text-left">
-                  <span className="leading-tight">{activeProfile?.name || 'Select Template'}</span>
+                  <span className="leading-tight">{activeProfile?.name || 'Select Profile'}</span>
                   <span className="text-[9px] font-normal text-muted-foreground uppercase">Active Workspace</span>
                 </div>
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground p-3">Workspace Templates</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground p-3">Workspace Profiles</DropdownMenuLabel>
               {profiles.map(p => (
                 <DropdownMenuItem key={p.id} onClick={() => onProfileChange(p.id)} className="p-3 cursor-pointer">
                   <div className="flex flex-col">
@@ -124,10 +122,22 @@ export function Toolbar({
                   </div>
                 </DropdownMenuItem>
               ))}
+              
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground p-3">Saved Templates</DropdownMenuLabel>
+              {templates.map(t => (
+                <DropdownMenuItem key={t.id} onClick={() => onApplyTemplate(t)} className="p-3 cursor-pointer">
+                  <div className="flex flex-col">
+                    <span className="font-bold">{t.name}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">{t.tables.length} nodes</span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+
               <DropdownMenuSeparator />
               <Link href="/templates">
                 <DropdownMenuItem className="text-primary font-black uppercase text-[10px] p-3 tracking-widest gap-2 cursor-pointer">
-                  <Settings2 className="w-3 h-3" /> Manage Templates
+                  <Layers className="w-3 h-3" /> Manage Templates
                 </DropdownMenuItem>
               </Link>
             </DropdownMenuContent>

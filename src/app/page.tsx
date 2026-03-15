@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useWorkbench } from '@/context/WorkbenchContext';
@@ -49,7 +50,9 @@ export default function WorkbenchPage() {
     limit,
     setLimit,
     addFilter,
-    addSort
+    addSort,
+    templates,
+    applyTemplate
   } = useWorkbench();
 
   return (
@@ -69,7 +72,9 @@ export default function WorkbenchPage() {
         onDuplicateProfile={duplicateProfile}
         onSaveProfile={saveCurrentToProfile}
         onExecute={executeQuery} 
-        isExecuting={isExecuting} 
+        isExecuting={isExecuting}
+        templates={templates}
+        onApplyTemplate={applyTemplate}
       />
       
       <div className="flex-1 flex overflow-hidden">
