@@ -11,14 +11,19 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function getSchema(connectionId?: string): Promise<TableSchema[]> {
-  const url = connectionId 
-    ? `${BASE}/connections/${encodeURIComponent(connectionId)}/schema`
+export async function getSchema(connectionId?: string, schemaName?: string): Promise<TableSchema[]> {
+  const url = connectionId
+    ? `${BASE}/connections/${encodeURIComponent(connectionId)}/schema${schemaName ? `?schemaName=${encodeURIComponent(schemaName)}` : ''}`
     : `${BASE}/schema`;
 
   const res = await fetch(url, { cache: 'no-store' });
   const json = await handleResponse<{ tables: TableSchema[] }>(res);
   return json.tables;
+}
+
+export async function getSchemas(connectionId: string): Promise<string[]> {
+  const res = await fetch(`${BASE}/connections/${encodeURIComponent(connectionId)}/schemas`, { cache: 'no-store' });
+  return handleResponse<string[]>(res);
 }
 
 export async function getConnections(): Promise<Connection[]> {
@@ -111,7 +116,13 @@ export type QueryValidationResult = {
   unreachableTables?: string[];
 };
 
-export async function executeQuery(payload: StructuredQuery): Promise<QueryResult> {
+export type QueryRequest = {
+  connectionId: string;
+  sql: string;
+  queryLimit: number;
+};
+
+export async function executeQuery(payload: QueryRequest): Promise<QueryResult> {
   const res = await fetch(`${BASE}/query/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,7 +131,7 @@ export async function executeQuery(payload: StructuredQuery): Promise<QueryResul
   return handleResponse<QueryResult>(res);
 }
 
-export async function validateQuery(payload: StructuredQuery): Promise<QueryValidationResult> {
+export async function validateQuery(payload: QueryRequest): Promise<QueryValidationResult> {
   const res = await fetch(`${BASE}/query/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -99,31 +99,25 @@ export function TableNode({
       <Card className={cn(
         "w-64 border-2 shadow-2xl bg-card transition-all overflow-hidden flex flex-col",
         isPendingSource ? "border-accent ring-4 ring-accent/20" : "hover:shadow-primary/20",
-        isRoot ? "border-primary" : "border-border",
-        !isReachable && !isRoot && "opacity-60 grayscale-[0.5]"
+        isRoot ? "border-primary" : "border-border"
       )}>
         <CardHeader 
           className={cn(
-            "p-3 flex flex-row items-center justify-between cursor-grab active:cursor-grabbing border-b",
+            "p-3 flex flex-row items-center justify-between cursor-grab active:cursor-grabbing border-b min-w-0",
             isRoot ? "bg-primary/20" : "bg-secondary/50"
           )}
           onMouseDown={handleMouseDown}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <GripHorizontal className="w-4 h-4 text-muted-foreground" />
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <CardTitle className="text-[11px] font-bold uppercase tracking-widest">{table.name}</CardTitle>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <CardTitle className="text-[11px] font-bold uppercase tracking-widest truncate min-w-0">{table.name}</CardTitle>
                 <Badge variant="outline" className="text-[8px] px-1 h-3 opacity-60 font-mono">{schemaItem.schemaName || 'public'}</Badge>
               </div>
-              {!isReachable && !isRoot && (
-                <span className="text-[9px] text-destructive font-black tracking-widest flex items-center gap-1 mt-0.5">
-                  <AlertCircle className="w-2.5 h-2.5" /> UNREACHABLE
-                </span>
-              )}
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
              <button 
               onClick={() => onSetRoot(table.id)}
               className={cn("p-1.5 rounded hover:bg-white/10 transition-colors", isRoot ? "text-primary" : "text-muted-foreground")}
@@ -132,7 +126,11 @@ export function TableNode({
               <Anchor className="w-3.5 h-3.5" />
             </button>
             <button 
-              onClick={() => onRemove(table.id)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(table.id);
+              }}
               className="p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
               title="Remove Table"
             >

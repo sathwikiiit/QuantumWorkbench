@@ -96,6 +96,9 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [pendingJoin, setPendingJoin] = useState<{tableId: string, column: string} | null>(null);
 
+  // Normalize IDs to strings to avoid mismatched types between server and client
+  const normalizeId = (id: unknown) => (id === null || id === undefined ? '' : String(id));
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -109,19 +112,31 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
           api.getPresets().catch(() => [])
         ]);
         if (cancelled) return;
-        setConnections(conn);
-        setProfiles(prof);
+
+        const normalizedConnections = conn.map(c => ({ ...c, id: normalizeId(c.id) }));
+        const normalizedProfiles = prof.map(p => ({ ...p, id: normalizeId(p.id), connectionId: normalizeId(p.connectionId) }));
+        const normalizedTemplates = templ.map(t => ({
+          ...t,
+          id: normalizeId(t.id),
+          connectionId: normalizeId(t.connectionId),
+          rootTableId: normalizeId(t.rootTableId)
+        }));
+        const normalizedSavedQueries = saved.map(s => ({ ...s, id: normalizeId(s.id), connectionId: normalizeId(s.connectionId) }));
+        const normalizedPresets = pre.map(p => ({ ...p, id: normalizeId(p.id) }));
+
+        setConnections(normalizedConnections);
+        setProfiles(normalizedProfiles);
         setHistory(hist);
-        setTemplates(templ);
-        setSavedQueries(saved);
-        setPresets(pre);
+        setTemplates(normalizedTemplates);
+        setSavedQueries(normalizedSavedQueries);
+        setPresets(normalizedPresets);
         
         // Only set defaults if nothing is active
-        if (conn.length > 0 && !activeConnectionId) {
-          setActiveConnectionId(conn[0].id);
+        if (normalizedConnections.length > 0 && !activeConnectionId) {
+          setActiveConnectionId(normalizedConnections[0].id);
         }
-        if (prof.length > 0 && !activeProfileId) {
-          setActiveProfileId(prof[0].id);
+        if (normalizedProfiles.length > 0 && !activeProfileId) {
+          setActiveProfileId(normalizedProfiles[0].id);
         }
       } catch (error) {
         console.error('Failed initial load', error);
@@ -135,19 +150,42 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
       setSchema([]);
       return;
     }
-    
+
     if (schemaCache[activeConnectionId]) {
       setSchema(schemaCache[activeConnectionId]);
       return;
     }
 
+    // Clear previous connection's schema until new schema loads
+    setSchema([]);
+
     let cancelled = false;
     (async () => {
       try {
-        const schemaData = await api.getSchema(activeConnectionId);
+        // First load available schemas (names) for the connection
+        const schemaNames = await api.getSchemas(activeConnectionId);
         if (cancelled) return;
-        setSchema(schemaData);
-        setSchemaCache(prev => ({ ...prev, [activeConnectionId]: schemaData }));
+
+        // Fetch tables for each schema in parallel (so we don't pull everything in one huge request)
+        const perSchemaResults = await Promise.all(
+          schemaNames.map(async (schemaName) => {
+            try {
+              const tables = await api.getSchema(activeConnectionId, schemaName);
+              if (!cancelled) {
+                setSchema(prev => [...prev, ...tables]);
+              }
+              return tables;
+            } catch (error) {
+              console.warn(`Failed to load schema '${schemaName}'`, error);
+              return [] as typeof schema;
+            }
+          })
+        );
+
+        if (cancelled) return;
+
+        const combined = perSchemaResults.flat();
+        setSchemaCache(prev => ({ ...prev, [activeConnectionId]: combined }));
       } catch (error) {
         console.error('Schema fetch failed', error);
         setSchema([]);
@@ -156,11 +194,14 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, [activeConnectionId, schemaCache]);
 
+  // Determine which tables are reachable from the current root table via active joins.
+  // This ensures SQL generation only includes columns from tables that are connected.
   const reachableTables = useMemo(() => {
     if (!rootTableId) return new Set<string>();
     const reachable = new Set<string>();
     const queue = [rootTableId];
     reachable.add(rootTableId);
+
     while (queue.length > 0) {
       const currentId = queue.shift()!;
       joins.forEach(join => {
@@ -174,6 +215,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
         }
       });
     }
+
     return reachable;
   }, [rootTableId, joins]);
 
@@ -256,13 +298,15 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
 
   const addConnection = useCallback(async (conn: Omit<Connection, 'id' | 'password' | 'status'> & { password?: string }) => {
     const newConn = await api.createConnection(conn);
-    setConnections(prev => [...prev, newConn]);
-    return newConn.id;
+    const normalized = { ...newConn, id: normalizeId(newConn.id) };
+    setConnections(prev => [...prev, normalized]);
+    return normalized.id;
   }, []);
 
   const updateConnection = useCallback(async (id: string, updates: Partial<Connection>) => {
     const updated = await api.updateConnection(id, updates);
-    setConnections(prev => prev.map(c => c.id === id ? updated : c));
+    const normalized = { ...updated, id: normalizeId(updated.id) };
+    setConnections(prev => prev.map(c => c.id === id ? normalized : c));
   }, []);
 
   const deleteConnection = useCallback(async (id: string) => {
@@ -314,36 +358,52 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
   }, [activeProfileId, activeConnectionId, tables, joins, rootTableId, filters, sorting, limit]);
 
   const saveTemplate = useCallback(async (name: string, connectionId?: string) => {
-    const cid = connectionId || activeConnectionId;
+    const cid = normalizeId(connectionId || activeConnectionId);
     const newTemplate = await api.createTemplate({
       name, connectionId: cid, tables, joins, rootTableId, 
       selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-      filters, sorting, limit, createdAt: new Date().toISOString()
+      filters, sorting, limit
     });
-    setTemplates(prev => [...prev, newTemplate]);
+    const normalized = {
+      ...newTemplate,
+      id: normalizeId(newTemplate.id),
+      connectionId: normalizeId(newTemplate.connectionId),
+      rootTableId: normalizeId(newTemplate.rootTableId)
+    };
+    setTemplates(prev => [...prev, normalized]);
   }, [activeConnectionId, tables, joins, rootTableId, filters, sorting, limit]);
 
   const updateTemplate = useCallback(async (id: string, updates: Partial<Template>) => {
     const updated = await api.updateTemplate(id, updates);
-    setTemplates(prev => prev.map(t => t.id === id ? updated : t));
+    const normalized = {
+      ...updated,
+      id: normalizeId(updated.id),
+      connectionId: normalizeId(updated.connectionId),
+      rootTableId: normalizeId(updated.rootTableId)
+    };
+    setTemplates(prev => prev.map(t => t.id === id ? normalized : t));
     toast({ title: "Template Updated" });
   }, []);
 
   const applyTemplate = useCallback((template: Template) => {
+    // Ensure we always have a valid connection id when applying a template.
+    // Some templates might have missing or undefined connection IDs.
+    const connectionId = normalizeId(template.connectionId) || activeConnectionId || normalizeId(connections[0]?.id);
+
     // Atomic update of connection and state
-    setActiveConnectionId(template.connectionId);
+    setActiveConnectionId(connectionId);
     setTables(template.tables);
     setJoins(template.joins);
     setRootTableId(template.rootTableId);
     setFilters(template.filters);
     setSorting(template.sorting);
     setLimit(template.limit);
-    
+
     // Deactivate any active profile to prevent overwrites
     setActiveProfileId('');
-    
+
     toast({ title: "Template Applied", description: `Layout restored for ${template.name}` });
-  }, []);
+  }, [activeConnectionId, connections]);
 
   const deleteTemplate = useCallback(async (id: string) => {
     await api.deleteTemplate(id);
@@ -355,7 +415,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
       name, connectionId: activeConnectionId, templateId, sql: generatedSql,
       enabledJoins: joins.filter(j => j.active).map(j => j.id),
       selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-      filters, sorting, limit, params, createdAt: new Date().toISOString()
+      filters, sorting, limit, params
     });
     setSavedQueries(prev => [...prev, newQuery]);
   }, [activeConnectionId, generatedSql, joins, tables, filters, sorting, limit, params]);
@@ -382,21 +442,8 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     try {
       const payload = {
         connectionId: activeConnectionId,
-        rootTableId,
-        limit,
-        params,
-        joins: joins.map(j => ({
-          id: j.id,
-          sourceTableId: j.sourceTableId,
-          sourceColumn: j.sourceColumn,
-          targetTableId: j.targetTableId,
-          targetColumn: j.targetColumn,
-          type: j.type,
-          active: j.active
-        })),
-        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-        filters: filters.map(f => ({ tableId: f.tableId, column: f.column, operator: f.operator, value: f.value })),
-        sorting: sorting.map(s => ({ tableId: s.tableId, column: s.column, order: s.order }))
+        sql: generatedSql,
+        queryLimit: limit
       };
       const result = await api.executeQuery(payload);
       setQueryResult(result);
@@ -409,20 +456,15 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
       console.error(error);
       toast({ variant: 'destructive', title: 'Query Failed' });
     } finally { setIsExecuting(false); }
-  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
+  }, [activeConnectionId, rootTableId, generatedSql, limit, params]);
 
   const validateQuery = useCallback(async () => {
     if (!rootTableId || !activeConnectionId) return;
     try {
       const payload = {
         connectionId: activeConnectionId,
-        rootTableId,
-        limit,
-        params,
-        joins: joins.map(j => ({ id: j.id, sourceTableId: j.sourceTableId, sourceColumn: j.sourceColumn, targetTableId: j.targetTableId, targetColumn: j.targetColumn, type: j.type, active: j.active })),
-        selectedColumns: tables.flatMap(t => t.pinnedColumns.map(col => ({ tableId: t.id, column: col }))),
-        filters: filters.map(f => ({ tableId: f.tableId, column: f.column, operator: f.operator, value: f.value })),
-        sorting: sorting.map(s => ({ tableId: s.tableId, column: s.column, order: s.order }))
+        sql: generatedSql,
+        queryLimit: limit
       };
       const result = await api.validateQuery(payload);
       if (result.valid) {
@@ -433,35 +475,47 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       toast({ variant: 'destructive', title: "Validation Error" });
     }
-  }, [activeConnectionId, rootTableId, joins, tables, filters, sorting, limit, params]);
+  }, [activeConnectionId, rootTableId, generatedSql, limit]);
 
   useEffect(() => {
     if (!rootTableId) { setGeneratedSql('-- Anchor a root table to begin SQL generation'); return; }
     const rootTable = tables.find(t => t.id === rootTableId);
     if (!rootTable) return;
+
+    const rootSchema = rootTable.schemaName || '';
+    const qualify = (t: typeof rootTable) => {
+      const schemaName = t.schemaName || '';
+      const needsSchema = schemaName && schemaName !== rootSchema;
+      return needsSchema ? `${schemaName}.${t.name}` : t.name;
+    };
+
     const activeReachableTables = tables.filter(t => reachableTables.has(t.id));
     let sql = "SELECT\n";
-    const selectCols = activeReachableTables.flatMap(t => t.pinnedColumns.map(col => `  ${t.name}.${col}`));
+    const selectCols = activeReachableTables.flatMap(t => t.pinnedColumns.map(col => `  ${qualify(t)}.${col}`));
     sql += selectCols.length > 0 ? selectCols.join(",\n") : "  *";
-    sql += `\nFROM ${rootTable.name}`;
+    sql += `\nFROM ${qualify(rootTable)}`;
     joins.filter(j => j.active && reachableTables.has(j.sourceTableId) && reachableTables.has(j.targetTableId)).forEach(join => {
       const target = tables.find(t => t.id === join.targetTableId);
       const source = tables.find(t => t.id === join.sourceTableId);
-      if (source && target) sql += `\n${join.type} JOIN ${target.name} ON ${source.name}.${join.sourceColumn} = ${target.name}.${join.targetColumn}`;
+      if (source && target) {
+        sql += `\n${join.type} JOIN ${qualify(target)} ON ${qualify(source)}.${join.sourceColumn} = ${qualify(target)}.${join.targetColumn}`;
+      }
     });
     const activeFilters = filters.filter(f => reachableTables.has(f.tableId));
     if (activeFilters.length > 0) {
       sql += "\nWHERE " + activeFilters.map(f => {
         const t = tables.find(tbl => tbl.id === f.tableId);
-        if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') return `${t?.name}.${f.column} ${f.operator}`;
-        return `${t?.name}.${f.column} ${f.operator} ${f.value}`;
+        const prefix = t ? `${qualify(t)}.` : '';
+        if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') return `${prefix}${f.column} ${f.operator}`;
+        return `${prefix}${f.column} ${f.operator} ${f.value}`;
       }).join("\n  AND ");
     }
     const activeSorting = sorting.filter(s => reachableTables.has(s.tableId));
     if (activeSorting.length > 0) {
       sql += "\nORDER BY " + activeSorting.map(s => {
         const t = tables.find(tbl => tbl.id === s.tableId);
-        return `${t?.name}.${s.column} ${s.order}`;
+        const prefix = t ? `${qualify(t)}.` : '';
+        return `${prefix}${s.column} ${s.order}`;
       }).join(", ");
     }
     sql += `\nLIMIT ${limit};`;
@@ -479,7 +533,7 @@ export function WorkbenchProvider({ children }: { children: React.ReactNode }) {
 
   const savePreset = useCallback(async (name: string, params: Record<string, string>) => {
     const newPreset = await api.createPreset({
-      name, params, createdAt: new Date().toISOString()
+      name, params
     });
     setPresets(prev => [...prev, newPreset]);
   }, []);

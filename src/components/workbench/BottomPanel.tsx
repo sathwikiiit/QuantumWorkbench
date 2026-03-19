@@ -39,16 +39,22 @@ export function BottomPanel({
   limit, onLimitChange
 }: BottomPanelProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState('results');
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Switch to results tab automatically when a new result arrives
+  useEffect(() => {
+    if (result) setActiveTab('results');
+  }, [result]);
+
   const getTableName = (id: string) => tables.find(t => t.id === id)?.name || id;
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      <Tabs defaultValue="results" className="flex-1 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col bg-background">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
         <div className="px-4 border-b flex items-center justify-between bg-card/80 backdrop-blur-md sticky top-0 z-20">
           <TabsList className="bg-transparent h-12 border-b-0 gap-2">
             <TabsTrigger value="results" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-9 px-4 rounded-md transition-all text-[11px] font-black uppercase tracking-widest">
@@ -96,9 +102,9 @@ export function BottomPanel({
           </div>
         </div>
 
-        <TabsContent value="results" className="flex-1 mt-0 overflow-hidden">
+        <TabsContent value="results" className="flex-1 mt-0 overflow-hidden min-h-0">
           {result ? (
-            <ScrollArea className="h-full">
+            <ScrollArea className="h-full min-h-0">
               <Table>
                 <TableHeader className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
                   <TableRow>

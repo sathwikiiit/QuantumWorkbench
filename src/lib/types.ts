@@ -158,6 +158,12 @@ export type QueryResult = {
   rowCount: number;
 };
 
+export type QueryRequest = {
+  connectionId: string;
+  sql: string;
+  queryLimit: number;
+};
+
 export type ExecutionHistoryItem = {
   id: string;
   timestamp: string;

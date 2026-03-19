@@ -34,11 +34,11 @@ async function run() {
     body: JSON.stringify({ name: 'Production_v1_updated' }),
     headers: { 'Content-Type': 'application/json' }
   });
-  const updateRes = await updateConnection(updateReq, { params: Promise.resolve({ id: 'c1' }) });
+  const updateRes = await updateConnection();
   console.log('updateConnection status', updateRes.status);
 
   const { POST: testConnection } = await import('../src/app/api/connections/[id]/test/route');
-  const testRes = await testConnection(baseReq, { params: Promise.resolve({ id: 'c1' }) });
+  const testRes = await testConnection();
   console.log('testConnection status', testRes.status);
 
   console.log('Smoke test complete.');
